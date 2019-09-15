@@ -10,14 +10,14 @@
 ############################# SET OPTIONS ############################
 ######################################################################
 
-options(stringsAsFactors = F, use="pairwise.complete.obs")
+options(stringsAsFactors = F, use="pairwise.complete.obs", warn=1)
 
 ######################################################################
 ######################### UTILITY FUNCTIONS ##########################
 ######################################################################
 
-source(file="/projects/jonatan/tools/functions-src/utility_functions.R")
-source(file="/projects/jonatan/tools/functions-src/functions_sc.R")
+source(file="/projects/jonatan/tools/functions-src/utility-functions-src/utility_functions.R")
+source(file="/projects/jonatan/tools/functions-src/sc-functions-src/functions_sc.R")
 
 ######################################################################
 ########################### PACKAGES #################################
@@ -110,7 +110,7 @@ if (!file.exists(dirLog)) dir.create(dirLog)
 flagDate = substr(gsub("-","",as.character(Sys.Date())),3,1000)
 
 randomSeed = 12345
-
+set.seed(randomSeed)
 ######################################################################
 ############################ LOAD DATA ###############################
 ######################################################################

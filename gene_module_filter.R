@@ -8,7 +8,7 @@
 ########################## FUNCTIONS #################################
 ######################################################################
 
-source(file="/projects/jonatan/tools/functions-src/utility_functions.R")
+source(file="/projects/jonatan/tools/functions-src/utility-functions-src/utility_functions.R")
 
 ######################################################################
 ########################### OPTPARSE #################################

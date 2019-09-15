@@ -7,6 +7,8 @@
 #   * network connectivity preservation scores, value in [0:1]
 #   * module preservation Z-scores and p-values
 
+## NB: This script runs with Seurat 2.3. The library command lib.loc should be set manually in the script.
+
 # usage: e.g.
 ## time Rscript /projects/jonatan/tools/wgcna-src/wgcna-toolbox/wgcna_preservation.R --pathDfNWA   "/projects/jonatan/tmp-epilepsy/tables/modMerge2_test_df_geneModule_merged.csv.gz" --colGeneWeights  "pkIM" --vec_pathsDatExpr   'c("ep_ex" = "/projects/jonatan/tmp-epilepsy/RObjects/EP_ex_seurat_obj_filtered.RDS.gz")'  --vec_metadataIdentCols   'c("ep_ex" = "subtypesBoth")'  --list_list_vec_identLvlsMatch 'list("L6_Nr4a2"=list("ep_ex"=c("Exc_L5-6_THEMIS_DCSTAMP", "Exc_L5-6_THEMIS_CRABP1", "Exc_L5-6_THEMIS_FGF10")), "L3_Prss12"=list("ep_ex"=c("Exc_L3-4_RORB_CARM1P1")), "L5_Grin3a"=list("ep_ex"=c("Exc_L4-5_RORB_FOLH1B","Exc_L4-5_RORB_DAPK2", "Exc_L4-6_RORB_SEMA3E")), "L6_Syn3"=list("ep_ex"=c("Exc_L5-6_THEMIS_C1QL3")), "L2_3_Cux2"=list("ep_ex"=c("Exc_L2-3_LINC00507_FREM3")), "L2_Lamp5"=list("ep_ex"=c("Exc_L2-4_LINC00507_GLP2R","Exc_L2_LAMP5_LTK")), "L4_Rorb"=list("ep_ex"=c("Exc_L3-5_RORB_TWIST2", "Exc_L3-5_RORB_ESR1", "Exc_L3-5_RORB_COL22A1", "Exc_L3-5_RORB_FILIP1L")), "L6_tle4"=list("ep_ex"=c("Exc_L6_FEZF2_OR2T8","Exc_L6_FEZF2_SCUBE1", "Exc_L5-6_FEZF2_EFTUD1P1","Exc_L5-6_SLC17A7_IL15", "Exc_L5-6_FEZF2_ABO")), "L5_Htr2c"=list("ep_ex"=c("Exc_L4-6_FEZF2_IL26")))' --minGeneClusterSize 10 --minCellClusterSize 50 --colGeneNames "hgnc|symbol|gene_name_optimal" --dirOut    "/projects/jonatan/tmp-epilepsy/" --prefixOut    "ep_ex_4_multi_4" --dirTmp    "/scratch/tmp-wgcna/" --networkType  "signed hybrid" --corFnc    "cor" --dataOrganism    "hsapiens" --scaleCenterRegress T  --colMod module_merged --colCellCluster cell_cluster_merged
 
@@ -14,40 +16,19 @@
 ########################## DEFINE FUNCTIONS ##########################
 ######################################################################
 
-LocationOfThisScript = function() # Function LocationOfThisScript returns the location of this .R script (may be needed to source other files in same dir)
-{
-  this.file = NULL
-  # This file may be 'sourced'
-  for (i in -(1:sys.nframe())) {
-    if (identical(sys.function(i), base::source)) this.file = (normalizePath(sys.frame(i)$ofile))
-  }
-  
-  if (!is.null(this.file)) return(dirname(this.file))
-  
-  # But it may also be called from the command line
-  cmd.args = commandArgs(trailingOnly = FALSE)
-  cmd.args.trailing = commandArgs(trailingOnly = TRUE)
-  cmd.args = cmd.args[seq.int(from=1, length.out=length(cmd.args) - length(cmd.args.trailing))]
-  res = gsub("^(?:--file=(.*)|.*)$", "\\1", cmd.args)
-  
-  # If multiple --file arguments are given, R uses the last one
-  res = tail(res[res != ""], 1)
-  if (0 < length(res)) return(dirname(res))
-  
-  # Both are not the case. Maybe we are in an R GUI?
-  return(NULL)
-}
-
-dir_current = paste0(LocationOfThisScript(), "/")
-#dir_current = "/projects/jonatan/tools/wgcna-src/wgcna-toolbox/postWGCNAscripts/"
-
-source(file="/projects/jonatan/tools/functions-src/utility_functions.R")
+source(file="/projects/jonatan/tools/functions-src/utility-functions-src/utility_functions.R")
 
 ######################################################################
 ########################### PACKAGES #################################
 ######################################################################
 
-ipak(c("optparse", "WGCNA", "dplyr", "Biobase", "Matrix", "parallel", "readr"))#, "NetRep"))
+#ipak(c("optparse", "WGCNA", "dplyr", "Matrix", "parallel", "readr"))#, "NetRep"))
+suppressPackageStartupMessages(library(optparse))
+suppressPackageStartupMessages(library(WGCNA))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(Matrix))
+suppressPackageStartupMessages(library(parallel))
+suppressPackageStartupMessages(library(readr))
 library("Seurat", lib.loc = "/projects/jonatan/tools/Rpackages3.5/")
 stopifnot(grepl("2.3", as.character(packageVersion("Seurat"))))
 
@@ -503,7 +484,7 @@ fun1 = function(lvlRef)  {
     
     for (lvlTest in list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]]) {
       
-      idxCells <- as.integer(na.omit(match(rownames(metadataTest)[(metadataTest[[metadataColnameTest]] == lvlTest)], 
+      idxCells <- as.integer(na.omit(match(rownames(metadataTest)[metadataTest[[metadataColnameTest]] == lvlTest], 
                          rownames(list_datExpr[[datExprTestName]]))))
       datExprLvlTest <- list_datExpr[[datExprTestName]][idxCells, idxGenes]
       
@@ -869,41 +850,41 @@ df_presStats <- dplyr::left_join(df_modPresStats, df_nwPresStats, by=c("ref_data
 ############################ OUTPUTS #################################
 ######################################################################
 
-write.csv(x=df_presStats, file = paste0(dirTables, prefixOut, "_df_preservationStats.csv"), quote = F, row.names = F)
+saveMeta(savefnc= write.csv, x=df_presStats, file = paste0(dirTables, prefixOut, "_df_preservationStats.csv"), quote = F, row.names = F)
 # write.csv(x=df_nwPresStats, file = paste0(dirTables, prefixOut, "_df_nwPresStats.csv"), quote = F, row.names = F)
 #   
 
 ######################################################################
 ############### LOG PARAMETERS AND FILE VERSION ######################
 ######################################################################
-
-as.character(Sys.time()) %>% gsub("\\ ", "_",.) %>% gsub("\\:", ".", .) ->tStop
-
-if (is.null(path_runLog)) path_runLog <- paste0(dirLog, "_preservation_runLog.txt")
-
-dirCurrent = paste0(LocationOfThisScript(), "/") # need to have this function defined
-setwd(dirCurrent) # this should be a git directory
-
-# get the latest git commit
-gitCommitEntry <- try(system2(command="git", args=c("log", "-n 1 --oneline"), stdout=TRUE))
-
-# Write to text file
-cat(text = "\n" , file =  path_runLog, append=T, sep = "\n")
-cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
-
-cat(text = prefixOut , file =  path_runLog, append=T, sep = "\n")
-cat(sessionInfo()[[1]]$version.string, file=path_runLog, append=T, sep="\n")
-if (!"try-error" %in% class(gitCommitEntry)) cat(text = paste0("git commit: ", gitCommitEntry) , file =  path_runLog, append=T, sep = "\n")
-cat(text = paste0("tStart: ", tStart) , file =  path_runLog, append=T, sep = "\n")
-cat(text = paste0("tStop: ", tStop) , file =  path_runLog, append=T, sep = "\n")
-
-# output parameters (assumping use of optparse package)
-cat(text = "\nPARAMETERS: " , file =  path_runLog, append=T, sep = "\n")
-for (i in 1:length(opt)) {
-  cat(text = paste0(names(opt)[i], "= ", opt[[i]]) , file =  path_runLog, append=T, sep = "\n")
-}
-
-cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
+# 
+# as.character(Sys.time()) %>% gsub("\\ ", "_",.) %>% gsub("\\:", ".", .) ->tStop
+# 
+# if (is.null(path_runLog)) path_runLog <- paste0(dirLog, "_preservation_runLog.txt")
+# 
+# dirCurrent = paste0(LocationOfThisScript(), "/") # need to have this function defined
+# setwd(dirCurrent) # this should be a git directory
+# 
+# # get the latest git commit
+# gitCommitEntry <- try(system2(command="git", args=c("log", "-n 1 --oneline"), stdout=TRUE))
+# 
+# # Write to text file
+# cat(text = "\n" , file =  path_runLog, append=T, sep = "\n")
+# cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
+# 
+# cat(text = prefixOut , file =  path_runLog, append=T, sep = "\n")
+# cat(sessionInfo()[[1]]$version.string, file=path_runLog, append=T, sep="\n")
+# if (!"try-error" %in% class(gitCommitEntry)) cat(text = paste0("git commit: ", gitCommitEntry) , file =  path_runLog, append=T, sep = "\n")
+# cat(text = paste0("tStart: ", tStart) , file =  path_runLog, append=T, sep = "\n")
+# cat(text = paste0("tStop: ", tStop) , file =  path_runLog, append=T, sep = "\n")
+# 
+# # output parameters (assumping use of optparse package)
+# cat(text = "\nPARAMETERS: " , file =  path_runLog, append=T, sep = "\n")
+# for (i in 1:length(opt)) {
+#   cat(text = paste0(names(opt)[i], "= ", opt[[i]]) , file =  path_runLog, append=T, sep = "\n")
+# }
+# 
+# cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
 
 
 ############################ WRAP UP ################################
