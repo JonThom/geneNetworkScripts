@@ -1,7 +1,7 @@
 ## script to merge gene modules from different WGCNA runs based on the overlap in genes
 
 # Usage e.g.
-# time Rscript /projects/jonatan/tools/wgcna-serc/wgcna-toolbox/gene_module_merge2.R path_df_NWA /projects/jonatan/tmp-epilepsy/tables/ep_ex_4_10000_genes_cell_cluster_module_genes.csv --colGeneWeights pkIM   colGeneNames ="hgnc" --minPropIntersect  0.75 --minWeightedCor  0.75 --minPropIntersect_iter_increase  1.01 --maxIter25 --corMethod  "pearson" --dirOut "/projects/jonatan/tmp-epilepsy/" --prefixOut "modMerge2_test" --RAMGbMax 250
+# time Rscript ./gene_module_merge2.R path_df_NWA /projects/jonatan/tmp-epilepsy/tables/ep_ex_4_10000_genes_cell_cluster_module_genes.csv.gz --colGeneWeights pkIM --colGeneNames hgnc --minPropIntersect  0.75 --minWeightedCor  0.75 --minPropIntersect_iter_increase  1.01 --maxIter 25 --corMethod  pearson --dirOut /projects/jonatan/tmp-epilepsy/ --prefixOut modMerge2_test --RAMGbMax 250
 
 # Algorithm:
 # Do until k == maxIter or until there are no modules to merge:
@@ -21,13 +21,13 @@
 ########################## FUNCTIONS #################################
 ######################################################################
 
-source(file="/projects/jonatan/tools/functions-src/utility-functions-src/utility_functions.R")
+library("optparse")
+
 
 ######################################################################
 ########################### OPTPARSE #################################
 ######################################################################
 
-ipak(c("optparse"))
 
 option_list <- list(
   make_option("--path_df_NWA", type="character",
@@ -64,7 +64,23 @@ option_list <- list(
 ########################### PACKAGES #################################
 ######################################################################
 
-ipak(c("dplyr", "Matrix", "parallel", "WGCNA", "corrplot", "readr", "RColorBrewer"))
+library("here")
+library("dplyr")
+library("Matrix")
+library("parallel")
+library("WGCNA")
+library("corrplot")
+library("readr")
+library("RColorBrewer")
+
+#ipak(c("dplyr", "Matrix", "parallel", "WGCNA", "corrplot", "readr", "RColorBrewer", "here"))
+
+
+######################################################################
+######################### SOURCE FUNCTIONS ################################
+######################################################################
+
+source(here("perslab-sc-library", "utility_functions.R"))
 
 ######################################################################
 ############################ PARAMS ##################################
@@ -167,8 +183,8 @@ while (T) {
     return(geneWeights)
   }
   
-  args = list("X"=modules)
-  list_geneWeights <- safeParallel(fun=fun,args=args)
+  list_iterable = list("X"=modules)
+  list_geneWeights <- safeParallel(fun=fun,list_iterable=list_iterable)
   names(list_geneWeights) <- modules
   ######################################################################
   ############## Compute the mod j - mod i prop. overlap matrix ########
@@ -185,8 +201,8 @@ while (T) {
     }, simplify=T)
   }
   
-  args = list("X"=list_geneWeights)
-  mat_moduleGeneIntersect <- safeParallel(fun=fun,args=args, simplify = T)
+  list_iterable = list("X"=list_geneWeights)
+  mat_moduleGeneIntersect <- safeParallel(fun=fun,list_iterable=list_iterable, simplify = T)
   
   # set diagonal to zero
   mat_moduleGeneIntersect[col(mat_moduleGeneIntersect)==row(mat_moduleGeneIntersect)] <- 0
@@ -266,7 +282,7 @@ while (T) {
   #   print(mat_modIntersectCorrWeighted[i,j])
   # }
   
-  #args = list("X"=list_geneWeights)
+  #list_iterable = list("X"=list_geneWeights)
   
   # the outer loop goes in the columns, the inner loop goes in the rows
   
@@ -285,7 +301,7 @@ while (T) {
   #   }, simplify=T)
   # }
   
-  #mat_modIntersectCorrWeighted <- safeParallel(fun=fun,args=args, simplify = T)
+  #mat_modIntersectCorrWeighted <- safeParallel(fun=fun,list_iterable=list_iterable, simplify = T)
   
   # set diagonal to zero
   #mat_modIntersectCorrWeighted[col(mat_modIntersectCorrWeighted)==row(mat_modIntersectCorrWeighted)] <- 0
@@ -420,39 +436,7 @@ while (T) {
 ############################ WRAP UP #################################
 ######################################################################
 
-write.csv(x = df_geneModule, file= gzfile(paste0(dirTables, prefixOut, "_cell_cluster_module_genes.csv.gz")), quote = F, row.names=F)
-
-######################################################################
-############### LOG PARAMETERS AND FILE VERSION ######################
-######################################################################
-
-as.character(Sys.time()) %>% gsub("\\ ", "_",.) %>% gsub("\\:", ".", .) ->tStop
-
-if (is.null(path_runLog)) path_runLog <- paste0(dirLog, "_preservation_runLog.txt")
-
-dirCurrent = paste0(LocationOfThisScript(), "/") # need to have this function defined
-setwd(dirCurrent) # this should be a git directory
-
-# get the latest git commit
-gitCommitEntry <- try(system2(command="git", args=c("log", "-n 1 --oneline"), stdout=TRUE))
-
-# Write to text file
-cat(text = "\n" , file =  path_runLog, append=T, sep = "\n")
-cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
-
-cat(text = prefixOut , file =  path_runLog, append=T, sep = "\n")
-cat(sessionInfo()[[1]]$version.string, file=path_runLog, append=T, sep="\n")
-if (!"try-error" %in% class(gitCommitEntry)) cat(text = paste0("git commit: ", gitCommitEntry) , file =  path_runLog, append=T, sep = "\n")
-cat(text = paste0("tStart: ", tStart) , file =  path_runLog, append=T, sep = "\n")
-cat(text = paste0("tStop: ", tStop) , file =  path_runLog, append=T, sep = "\n")
-
-# output parameters (assumping use of optparse package)
-cat(text = "\nPARAMETERS: " , file =  path_runLog, append=T, sep = "\n")
-for (i in 1:length(opt)) {
-  cat(text = paste0(names(opt)[i], "= ", opt[[i]]) , file =  path_runLog, append=T, sep = "\n")
-}
-
-cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
+saveMeta(savefnc=write.csv,x = df_geneModule, file= gzfile(paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv")), quote = F, row.names=F)
 
 ############################### FINISH ##################################
 
