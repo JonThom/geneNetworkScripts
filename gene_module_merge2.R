@@ -414,7 +414,7 @@ while (T) {
   #cat(log_entry, file = pathLog, append=T, sep = "\n")
 
   log_entry <- if (mergeOrPrune=="merge") { paste0("    merging ", mods_to_merge, " into ", mods_to_merge_into, collapse="\n") } else {
-    paste0("    pruning ", mods_to_merge, " due to overlap with ", mods_to_merge_into, collapse="\n") 
+    paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigIntersect[logical2_colBigIntersectCorr]], collapse="\n") 
   }
   
   message(log_entry)
