@@ -1,7 +1,7 @@
 ## script to merge gene modules from different WGCNA runs based on the overlap in genes
 
 # Usage e.g.
-# time Rscript ./gene_module_merge2.R path_df_NWA /projects/jonatan/tmp-epilepsy/tables/ep_ex_4_10000_genes_cell_cluster_module_genes.csv.gz --colGeneWeights pkIM --colGeneNames hgnc --minPropIntersect  0.75 --minWeightedCor  0.75 --minPropIntersect_iter_increase  1.01 --maxIter 25 --corMethod  pearson --dirOut /projects/jonatan/tmp-epilepsy/ --prefixOut modMerge2_test --RAMGbMax 250
+# time Rscript /nfsdata/projects/jonatan/tools/wgcna-src/geneNetworkScripts/gene_module_merge2.R  --path_df_NWA /projects/jonatan/pub-perslab/18-liver-wgcna/tables/liver_perslab_int_wgcna1_cell_cluster_module_genes.csv.gz --colGeneWeights pkMs  --colGeneNames genes --minPropIntersect  0.75 --minWeightedCor  0.75 --minPropIntersect_iter_increase  1.01 --maxIter 25 --corMethod  pearson --dirOut /projects/jonatan/pub-perslab/18-liver-wgcna/ --prefixOut merge1 --RAMGbMax 250
 
 # Algorithm:
 # Do until k == maxIter or until there are no modules to merge:
@@ -34,13 +34,13 @@ option_list <- list(
               help = "path to dataframe from a gene network analysis run, in long format (i.e. one row per gene per celltype), containing 'cell_cluster', 'module', one or two gene name columns, and a column of numeric scores. I.e. one row per gene, e.g. rwgcna cell_cluster_module_genes.csv files"),  
   make_option("--colGeneWeights", type="character", default ="pk.*M",
               help = "nwa_df column with gene weights, , [default %default]"),  
-  make_option("--colGeneNames", type="character", default="hgnc",
+  make_option("--colGeneNames", type="character", default="genes",
               help ="string or regex for grepping nwa_df e.g. 'hgnc|symbol|gene_name' or 'ensembl', [default %default]"),
-    make_option("--minPropIntersect", type="numeric", default = 0.65,
+    make_option("--minPropIntersect", type="numeric", default = 0.7,
               help = "minimum proportion of module j intersecting with module i to discard j or merge j into i, [default %default]"),
   make_option("--minPropIntersect_iter_increase", type="numeric", default = 1.02,
               help = "At the end of each iteration, multiply the minPropIntersect threshold by some numeric constant >= 1 to help ensure convergence given that merging modules increases the probability that others will have a large overlap with them, [default %default]"),
-  make_option("--minWeightedCor", type="numeric", default = 0.8,
+  make_option("--minWeightedCor", type="numeric", default = 0.7,
               help = "if module j has at least minPropIntersect genes also in module i, set minimum correlation weighted by gene weight, to discard j or merge j into i, [default %default]"),
   make_option("--corMethod", type="character", default = "pearson",
               help = "pearson, spearman or kendall, [default %default]"),
@@ -55,25 +55,11 @@ option_list <- list(
   make_option("--doPlot", type="logical", default = F,
               help = "Whether or not to plot intersect and correlation matrices at each iteration, [default %default]"),
   make_option("--RAMGbMax", type="integer", default=250,
-              help = "Upper limit on Gb RAM available. Taken into account when setting up parallel processes. [default %default]"),
-  make_option("--path_runLog", type="character", default=NULL,
-              help = "Path to file to log the run and the git commit. If left as NULL, write to a file called runLog.text in the dirLog [default %default]")
+              help = "Upper limit on Gb RAM available. Taken into account when setting up parallel processes. [default %default]")
 )
 
-######################################################################
-########################### PACKAGES #################################
-######################################################################
 
 library("here")
-library("dplyr")
-library("Matrix")
-library("parallel")
-library("WGCNA")
-library("corrplot")
-library("readr")
-library("RColorBrewer")
-
-#ipak(c("dplyr", "Matrix", "parallel", "WGCNA", "corrplot", "readr", "RColorBrewer", "here"))
 
 
 ######################################################################
@@ -101,7 +87,20 @@ minPropIntersect_iter_increase <- opt$minPropIntersect_iter_increase
 minWeightedCor <- opt$minWeightedCor
 doPlot <- opt$doPlot
 RAMGbMax <- opt$RAMGbMax
-path_runLog <- opt$path_runLog
+
+######################################################################
+########################### PACKAGES #################################
+######################################################################
+
+library("dplyr")
+library("Matrix")
+library("parallel")
+library("WGCNA")
+library("readr")
+if (doPlot) {
+  library("corrplot")
+  library("RColorBrewer")
+}
 
 ######################################################################
 ############################# SET PARAMS #############################
@@ -155,7 +154,7 @@ df_geneModule[["module_merged"]] <- df_geneModule[["module"]]
 df_geneModule[["cell_cluster_merged"]] <- df_geneModule[["cell_cluster"]]
 
 #df_geneModule[[paste0(colGeneWeights, "_merged")]] <- df_geneModule[[colGeneWeights]] 
-pathLog <- paste0(dirLog, prefixOut, "_mod_merge_log.txt")
+#pathLog <- paste0(dirLog, prefixOut, "_mod_merge_log.txt")
 iteration=1
 modules_to_exclude <- c()
 
@@ -201,9 +200,9 @@ while (T) {
     }, simplify=T)
   }
   
-  list_iterable = list("X"=list_geneWeights)
-  mat_moduleGeneIntersect <- safeParallel(fun=fun,list_iterable=list_iterable, simplify = T)
-  
+  #list_iterable = list("X"=list_geneWeights)
+  #mat_moduleGeneIntersect <- safeParallel(fun=fun,list_iterable=list_iterable, simplify = T)
+  mat_moduleGeneIntersect <- sapply(FUN=fun,"X"=list_geneWeights, simplify = T)
   # set diagonal to zero
   mat_moduleGeneIntersect[col(mat_moduleGeneIntersect)==row(mat_moduleGeneIntersect)] <- 0
   
@@ -412,14 +411,14 @@ while (T) {
   # write out log 
   log_entry <- paste0(prefixOut, " merge iteration ", iteration, " with minPropIntersect = ", round(minPropIntersect,3), " and minWeightedCor = ", minWeightedCor)
   message(log_entry)
-  cat(log_entry, file = pathLog, append=T, sep = "\n")
+  #cat(log_entry, file = pathLog, append=T, sep = "\n")
 
   log_entry <- if (mergeOrPrune=="merge") { paste0("    merging ", mods_to_merge, " into ", mods_to_merge_into, collapse="\n") } else {
     paste0("    pruning ", mods_to_merge, " due to overlap with ", mods_to_merge_into, collapse="\n") 
   }
   
   message(log_entry)
-  cat(log_entry, file = pathLog, append=T, sep = "\n")
+  #cat(log_entry, file = pathLog, append=T, sep = "\n")
   
   iteration = iteration+1
  
@@ -436,7 +435,7 @@ while (T) {
 ############################ WRAP UP #################################
 ######################################################################
 
-saveMeta(savefnc=write.csv,x = df_geneModule, file= gzfile(paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv")), quote = F, row.names=F)
+saveMeta(savefnc=write.csv,x = df_geneModule, file= gzfile(paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv.gz")), quote = F, row.names=F)
 
 ############################### FINISH ##################################
 
