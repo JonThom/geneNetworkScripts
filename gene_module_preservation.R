@@ -7,72 +7,66 @@
 #   * network connectivity preservation scores, value in [0:1]
 #   * module preservation Z-scores and p-values
 
-## NB: This script runs with Seurat 2.3. The library command lib.loc should be set manually in the script.
 
 # usage: e.g.
-## time Rscript /projects/jonatan/tools/wgcna-src/wgcna-toolbox/wgcna_preservation.R --pathDfNWA   "/projects/jonatan/tmp-epilepsy/tables/modMerge2_test_df_geneModule_merged.csv.gz" --colGeneWeights  "pkIM" --vec_pathsDatExpr   'c("ep_ex" = "/projects/jonatan/tmp-epilepsy/RObjects/EP_ex_seurat_obj_filtered.RDS.gz")'  --vec_metadataIdentCols   'c("ep_ex" = "subtypesBoth")'  --list_list_vec_identLvlsMatch 'list("L6_Nr4a2"=list("ep_ex"=c("Exc_L5-6_THEMIS_DCSTAMP", "Exc_L5-6_THEMIS_CRABP1", "Exc_L5-6_THEMIS_FGF10")), "L3_Prss12"=list("ep_ex"=c("Exc_L3-4_RORB_CARM1P1")), "L5_Grin3a"=list("ep_ex"=c("Exc_L4-5_RORB_FOLH1B","Exc_L4-5_RORB_DAPK2", "Exc_L4-6_RORB_SEMA3E")), "L6_Syn3"=list("ep_ex"=c("Exc_L5-6_THEMIS_C1QL3")), "L2_3_Cux2"=list("ep_ex"=c("Exc_L2-3_LINC00507_FREM3")), "L2_Lamp5"=list("ep_ex"=c("Exc_L2-4_LINC00507_GLP2R","Exc_L2_LAMP5_LTK")), "L4_Rorb"=list("ep_ex"=c("Exc_L3-5_RORB_TWIST2", "Exc_L3-5_RORB_ESR1", "Exc_L3-5_RORB_COL22A1", "Exc_L3-5_RORB_FILIP1L")), "L6_tle4"=list("ep_ex"=c("Exc_L6_FEZF2_OR2T8","Exc_L6_FEZF2_SCUBE1", "Exc_L5-6_FEZF2_EFTUD1P1","Exc_L5-6_SLC17A7_IL15", "Exc_L5-6_FEZF2_ABO")), "L5_Htr2c"=list("ep_ex"=c("Exc_L4-6_FEZF2_IL26")))' --minGeneClusterSize 10 --minCellClusterSize 50 --colGeneNames "hgnc|symbol|gene_name_optimal" --dirOut    "/projects/jonatan/tmp-epilepsy/" --prefixOut    "ep_ex_4_multi_4" --dirTmp    "/scratch/tmp-wgcna/" --networkType  "signed hybrid" --corFnc    "cor" --dataOrganism    "hsapiens" --scaleCenterRegress T  --colMod module_merged --colCellCluster cell_cluster_merged
+## time Rscript /projects/jonatan/tools/wgcna-src/wgcna-toolbox/wgcna_preservation.R --path_dt_geneMod   "/projects/jonatan/tmp-epilepsy/tables/modMerge2_test_dt_geneMod_merged.csv.gz" --colGeneWeights  "pkIM" --vec_pathsDatExpr   'c("ep_ex" = "/projects/jonatan/tmp-epilepsy/RObjects/EP_ex_seurat_obj_filtered.RDS.gz")'  --vec_metadataIdentCols   'c("ep_ex" = "subtypesBoth")'  --list_list_vec_identLvlsMatch 'list("L6_Nr4a2"=list("ep_ex"=c("Exc_L5-6_THEMIS_DCSTAMP", "Exc_L5-6_THEMIS_CRABP1", "Exc_L5-6_THEMIS_FGF10")), "L3_Prss12"=list("ep_ex"=c("Exc_L3-4_RORB_CARM1P1")), "L5_Grin3a"=list("ep_ex"=c("Exc_L4-5_RORB_FOLH1B","Exc_L4-5_RORB_DAPK2", "Exc_L4-6_RORB_SEMA3E")), "L6_Syn3"=list("ep_ex"=c("Exc_L5-6_THEMIS_C1QL3")), "L2_3_Cux2"=list("ep_ex"=c("Exc_L2-3_LINC00507_FREM3")), "L2_Lamp5"=list("ep_ex"=c("Exc_L2-4_LINC00507_GLP2R","Exc_L2_LAMP5_LTK")), "L4_Rorb"=list("ep_ex"=c("Exc_L3-5_RORB_TWIST2", "Exc_L3-5_RORB_ESR1", "Exc_L3-5_RORB_COL22A1", "Exc_L3-5_RORB_FILIP1L")), "L6_tle4"=list("ep_ex"=c("Exc_L6_FEZF2_OR2T8","Exc_L6_FEZF2_SCUBE1", "Exc_L5-6_FEZF2_EFTUD1P1","Exc_L5-6_SLC17A7_IL15", "Exc_L5-6_FEZF2_ABO")), "L5_Htr2c"=list("ep_ex"=c("Exc_L4-6_FEZF2_IL26")))' --minGeneClusterSize 10 --minCellClusterSize 50 --colGeneNames "hgnc|symbol|gene_name_optimal" --dirOut    "/projects/jonatan/tmp-epilepsy/" --prefixOut    "ep_ex_4_multi_4" --dirTmp    "/scratch/tmp-wgcna/" --networkType  "signed hybrid" --corFnc    "cor" --dataOrganism    "hsapiens" --scaleCenterRegress T  --colMod module_merged --colCellClust cell_cluster_merged
 
 ######################################################################
 ########################## DEFINE FUNCTIONS ##########################
 ######################################################################
 
-source(file="/projects/jonatan/tools/functions-src/utility-functions-src/utility_functions.R")
+library("here")
+
+source(here("perslab-sc-library", "utility_functions.R"))
 
 ######################################################################
 ########################### PACKAGES #################################
 ######################################################################
 
-#ipak(c("optparse", "WGCNA", "dplyr", "Matrix", "parallel", "readr"))#, "NetRep"))
-suppressPackageStartupMessages(library(optparse))
-suppressPackageStartupMessages(library(WGCNA))
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(Matrix))
-suppressPackageStartupMessages(library(parallel))
-suppressPackageStartupMessages(library(readr))
-library("Seurat", lib.loc = "/projects/jonatan/tools/Rpackages3.5/")
-stopifnot(grepl("2.3", as.character(packageVersion("Seurat"))))
+suppressPackageStartupMessages(library("optparse"))
+suppressPackageStartupMessages(library("WGCNA"))
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("Matrix"))
+suppressPackageStartupMessages(library("parallel"))
+suppressPackageStartupMessages(library("data.table"))
 
 ######################################################################
 ########################### OPTPARSE #################################
 ######################################################################
 
 option_list <- list(
-  make_option("--pathDfNWA", type="character",
+  make_option("--path_dt_geneMod", type="character",
               help = "path to dataframe from a gene network analysis run, in long format (i.e. one row per gene per celltype), containing 'cell_cluster', 'module', one or two gene name columns, and a column of numeric scores. I.e. one row per gene, e.g. rwgcna cell_cluster_module_genes.csv files"),  
   make_option("--colGeneNames", type="character", default="hgnc|symbol|gene_name_optimal",
-              help ="string or regex for grepping nwa_df and gene mapping dataframe and for output, e.g. 'hgnc|symbol|gene_name' or 'ensembl', [default %default]"),
+              help ="WGCNA geneMod table column with gene names [default %default]"),
   make_option("--colGeneWeights", type="character",
-              help = "nwa_df column with gene weights"), 
+              help = "WGCNA geneMod table column with  gene weights"), 
   make_option("--colMod", type="character", default="module_merged",
-              help = "nwa_df column with module assignment [default %default]"), 
-  make_option("--colCellCluster", type="character", default="cell_cluster_merged",
-              help ="nwa_df colunn with module cell cluster of origin, e.g. 'cell_cluster' or 'cell_cluster_merged', [default %default]"),
+              help = "WGCNA geneMod table column with modules [default %default]"), 
+  make_option("--colCellClust", type="character", default="cell_cluster_merged",
+              help =" WGCNA geneMod table column with module cell cluster of origin, e.g. 'cell_cluster' or 'cell_cluster_merged', [default %default]"),
   make_option("--vec_pathsDatExpr", type="character",
-              help = "Quoted vector of named strings with paths to expression datasets in seurat or matrix dataframe datatype saved as (compressed) RObject, e.g. ''c('datExpr1'='/projects/mydata/datExpr1.RDS.gz', 'datExpr2'='/projects/mydata2/datExpr2.csv'). The first dataset is assumed to contain the reference subsets, but subsets of it may also be included among test datasets''"),  
-  make_option("--vec_pathsDatExprMetadata", type="character", default = NULL,
-              help = "Optional: Quoted vector of full paths to metadata in one of the standard (compressed) character separated formats. Should correspond to files in vec_pathsDatExpr; use NA_character_ to skip a datExpr. The script will always (also) use metadata stored within the path_datExpr objects if they are of the Seurat class. [default %default]"),  
+              help = "Quoted vector of named strings, paths to normalized expression data in delimited text form (readable by data.table::fread) with gene names in the first column"),  
+  make_option("--vec_pathsMetadata", type="character", 
+              help = "Quoted vector of full paths to metadata in one of the standard (compressed) character separated formats. Should correspond to files in vec_pathsDatExpr. [default %default]"),  
   make_option("--vec_metadataIdentCols", type="character",
               help = "vector of characters to identify columns in metadata by which to split the expression data, named by the datExpr names, e.g. ''c(datExpr1='celltype', datExpr2='clust.res.1')''."),
   make_option("--list_list_vec_identLvlsMatch", type="character", default=NULL,
-              help="a quoted list of named lists, named by 'reference' celltype, of vectors of components designating 'test' celltype(s). All , e.g. ''list('L6_Nr4a2'=list('ep_ex'=c('Exc_L5-6_THEMIS_DCSTAMP', 'Exc_L5-6_THEMIS_CRABP1', 'Exc_L5-6_THEMIS_FGF10')), 'L3_Prss12'=list('ep_ex'=c('Exc_L3-4_RORB_CARM1P1')), 'L5_Grin3a'=list('ep_ex'=c('Exc_L4-5_RORB_FOLH1B','Exc_L4-5_RORB_DAPK2', 'Exc_L4-6_RORB_SEMA3E')))''. If the argument is left as NULL, will match each level to all others. [default %default]"),       #help = "quoted list of named character vectors with named components. List names are labelling levels (e.g. 'tissue', 'celltype'), vector names are column in datExpr metadata, vector values are regex to match levels. Use NA in a vector to skip a dataset for that labelling. E.g. ''list('tissue' = c(tissue='.*', NA), 'sub_celltype'=c(tissue_cell_type = '.*', ClusterName = '.*'))''"),
+              help="a quoted list of named lists, named by 'reference' celltype, of vectors of components designating 'test' celltype(s), e.g. ''list('L6_Nr4a2'=list('ep_ex'=c('Exc_L5-6_THEMIS_DCSTAMP', 'Exc_L5-6_THEMIS_CRABP1', 'Exc_L5-6_THEMIS_FGF10')), 'L3_Prss12'=list('ep_ex'=c('Exc_L3-4_RORB_CARM1P1')), 'L5_Grin3a'=list('ep_ex'=c('Exc_L4-5_RORB_FOLH1B','Exc_L4-5_RORB_DAPK2', 'Exc_L4-6_RORB_SEMA3E')))''. If the argument is left as NULL, will match each level to all others. [default %default]"),       #help = "quoted list of named character vectors with named components. List names are labelling levels (e.g. 'tissue', 'celltype'), vector names are column in datExpr metadata, vector values are regex to match levels. Use NA in a vector to skip a dataset for that labelling. E.g. ''list('tissue' = c(tissue='.*', NA), 'sub_celltype'=c(tissue_cell_type = '.*', ClusterName = '.*'))''"),
   make_option("--minCellClusterSize", type="integer", default=50L,
-              help="What is the minimum number of cells in a cell_cluster to continue? Integer, [default %default]."),
+              help="Minimum number of cells in a cell_cluster, integer, [default %default]."),
   make_option("--minGeneClusterSize", type="integer", default=10L,
-              help="What is the minimum number of genes in a module to continue? Integer, [default %default]."),
+              help="Minimum number of genes in a module, integer, [default %default]."),
    make_option("--dirOut", type="character",
               help = "Outputs go to /tables and /RObjects subdirectories"),  
   make_option("--prefixOut", type="character", default = paste0(substr(gsub("-","",as.character(Sys.Date())),3,1000), "_", sample(x = 999, size = 1)),
               help = "Unique prefix for output files, [default %default]"),
-  make_option("--dirTmp", type="character", default = "/scratch/tmp-wgcna/",
+  make_option("--dirTmp", type="character", default = "/scratch/rkm916/tmp-wgcna/",
               help = "Outputs go to /tables and /RObjects subdirectories"),
   make_option("--networkType", type="character", default = "c('signed hybrid')",
               help = "for WGCNA modulePreservation function: one of 'signed', 'unsigned', ''c('signed hybrid')'',  [default %default]"),
   make_option("--corFnc", type="character", default = "cor",
               help = "for WGCNA modulePreservation function, 'cor' or 'bicor'"),
-  make_option("--dataOrganism", type="character", default="mmusculus",
-              help = "'hsapiens' or 'mmusculus', [default %default]"),
-  make_option("--scaleCenterRegress", type="logical", default = "TRUE",
-              help = "[default %default]. If TRUE, and vec_pathsDatExpr points to an RObject, the script will try to use the @scale.data slot and, if missing, will normalize and scale the data and regress out nUMI, percent.mito and percent.ribo. If FALSE, for RObjects will use the @data slot, or, if empty, the @raw.data slot"),  
   make_option("--RAMGbMax", type="integer", default=250L,
               help = "Upper limit on Gb RAM available. Taken into account when setting up parallel processes. [default %default]"),
   make_option("--path_runLog", type="character", default=NULL,
@@ -85,20 +79,15 @@ option_list <- list(
 
 opt <- parse_args(OptionParser(option_list=option_list))
 
-pathDfNWA <- opt$pathDfNWA 
+path_dt_geneMod <- opt$path_dt_geneMod 
 colGeneWeights <- opt$colGeneWeights
 colMod <- opt$colMod
-colCellCluster <- opt$colCellCluster
+colCellClust <- opt$colCellClust
 vec_pathsDatExpr <- eval(parse(text=opt$vec_pathsDatExpr))
-
-vec_pathsDatExprMetadata <- opt$vec_pathsDatExprMetadata
-if (!is.null(vec_pathsDatExprMetadata)) vec_pathsDatExprMetadata <- eval(parse(text=opt$vec_pathsDatExprMetadata)) # can be null
-
+vec_pathsMetadata <- eval(parse(text=opt$vec_pathsMetadata)) 
 vec_metadataIdentCols <- eval(parse(text=opt$vec_metadataIdentCols)) # cannot be null
-
 list_list_vec_identLvlsMatch <- opt$list_list_vec_identLvlsMatch
 if (!is.null(list_list_vec_identLvlsMatch)) list_list_vec_identLvlsMatch <- eval(parse(text=list_list_vec_identLvlsMatch))
-
 minCellClusterSize <- opt$minCellClusterSize
 minGeneClusterSize <- opt$minGeneClusterSize
 colGeneNames <- opt$colGeneNames
@@ -106,9 +95,8 @@ dirOut <- opt$dirOut
 prefixOut <- opt$prefixOut
 dirTmp <- opt$dirTmp
 networkType <- opt$networkType
+if (grepl("hybrid", networkType)) networkType <- eval(parse(text=opt$networkType))
 corFnc <- opt$corFnc
-dataOrganism <- opt$dataOrganism
-scaleCenterRegress <- opt$scaleCenterRegress
 RAMGbMax <- opt$RAMGbMax
 path_runLog <- opt$path_runLog
 
@@ -116,8 +104,8 @@ path_runLog <- opt$path_runLog
 ############################# SET PARAMS #############################
 ######################################################################
 
-options(stringsAsFactors = F, use="pairwise.complete.obs")
-#WGCNA::disableWGCNAThreads()
+options(stringsAsFactors = F, 
+        use="pairwise.complete.obs")
 
 ######################################################################
 ############################ CONSTANTS ###############################
@@ -147,61 +135,24 @@ randomSeed = 12345
 set.seed(randomSeed)
 
 ######################################################################
-##################### VERIFY AND NAME INPUT ##########################
-######################################################################
-
-# if (!is.null(lvls_ref)) {
-#   if (is.null(names(lvls_ref)) & length(IDs_datExpr)==1) { names(lvls_ref) <- IDs_datExpr }
-# }
-
-# if (all(sapply(lvls_test, function(test_lvl) is.null(names(test_lvl)))) & length(IDs_datExpr)==1) { 
-#  lvls_test <- lapply(lvls_test, function(test_lvl) {
-#     names(test_lvl) <- rep(IDs_datExpr, times=length(test_lvl)) 
-#     return(test_lvl)
-#   })
-# }
-
-#if (is.null(names(lvls_test))) names(lvls_test) <- lvls_ref[[1]]
-
-#if (is.null(names(vec_metadataIdentCols)) & length(IDs_datExpr)==1 & length(vec_metadataIdentCols)==1) {names(vec_metadataIdentCols) <- IDs_datExpr} 
-# TODO
-#if(!is.null(paths_metadata)) stopifnot(length(paths_metadata)==length(vec_pathsDatExpr))
-# stopifnot(all.equal(sapply(ident_groups, length)))
-# stopifnot(length(ident_groups_combs) %in% c(1, length(ident_groups)))
-#names(vec_metadataIdentCols) <- IDs_datExpr
-######################################################################
 ######################## LOAD MODULE DATA ############################
 ######################################################################
 
 message("Loading gene module data")
 
-df_geneModule <- load_obj(pathDfNWA)
+dt_geneMod <- fread(path_dt_geneMod)
 
-# If there are duplicate modules between WGCNA runs, prefix module names with the WGCNA run 
-# if (sapply(X=list_df_geneModule , function(df) unique(df[["module"]]), simplify = T) %>% unlist(use.names=F) %>% duplicated %>% any) {
-#   for (i in 1:length(list_df_geneModule)) {
-#     list_df_geneModule[[i]][["module"]] <- paste0(prefixes_nwa_run[i], "_",list_df_geneModule[[i]][["module"]]) # ensure modules from different runs remain distinct
-#   }
-# }
+list_metadata <- lapply(vec_pathsMetadata, fread)
 
-# If there are duplicate levels for celltype or tissue between WGCNA runs, prefix level names with the WGCNA run 
+list_datExpr <- lapply(vec_pathsDatExpr, function(pathDatExpr){
+  dt_datExpr <- fread(pathDatExpr)
+  if (any(duplicated(dt_datExpr[[1]]))) stop("datExpr has duplicate feature names, please ensure they are unique")
+  datExpr <- as.matrix(dt_datExpr[,-1]) 
+  rownames(datExpr) <- dt_datExpr[[1]]
+  return(t(datExpr))
+})
 
-# for (ident_group in ident_groups_nwa) {
-#   for (colname in names(ident_group)) {
-#     if (sapply(X=list_df_geneModule , function(df) unique(df[[colname]]), simplify = T) %>% unlist(use.names = F) %>% duplicated %>% any) {
-#       for (i in 1:length(list_df_geneModule)) {
-#         list_df_geneModule[[i]][[colname]] <- paste0(prefixes_nwa_run[i], "_",list_df_geneModule[[i]][[colname]]) # ensure modules from different runs remain distinct
-#       }
-#     }
-#   }
-# }
-
-# Identify gene and score columns
-
-geneCol <- grep(colGeneNames, colnames(df_geneModule), value=T)
-loadingCol <- grep(colGeneWeights, colnames(df_geneModule), value=T)#colnames(df_geneModule)[which(sapply(X=colnames(df_geneModule), FUN =function(colname) class(df_geneModule[[colname]]))=="numeric")]
-colMod <- grep(colMod, colnames(df_geneModule), value=T)
-colCellCluster <- grep(colCellCluster, colnames(df_geneModule), value=T)
+names(list_datExpr) <- names(vec_pathsDatExpr)
 
 ######################################################################
 ####################### CHECK WHETHER REF LEVELS EXIST ###############
@@ -210,61 +161,11 @@ colCellCluster <- grep(colCellCluster, colnames(df_geneModule), value=T)
 # check if the specified reference levels exist in the gene module df
 
 if (!is.null(list_list_vec_identLvlsMatch)) {
-  if (!all(names(list_list_vec_identLvlsMatch) %in% df_geneModule[[colCellCluster]]))  {
-    missing = names(list_list_vec_identLvlsMatch)[!names(list_list_vec_identLvlsMatch) %in% df_geneModule[[colCellCluster]]] 
-    if (length(missing)>0) stop(paste0(missing, " not found in gene module df ", collapse=" "))
+  if (!all(names(list_list_vec_identLvlsMatch) %in% dt_geneMod[[colCellClust]]))  {
+    missing = names(list_list_vec_identLvlsMatch)[!names(list_list_vec_identLvlsMatch) %in% dt_geneMod[[colCellClust]]] 
+    if (length(missing)>0) stop(paste0(missing, " not found in gene module table ", collapse=" "))
   }
 }
-
-######################################################################
-####################### LOAD DATEXPR METADATA ########################
-######################################################################
-
-list_datExprMetadata <- NULL
-if (!is.null(vec_pathsDatExprMetadata)){ 
-  message("Loading metadata") 
-  list_datExprMetadata <- lapply(vec_pathsDatExprMetadata, load_obj)
-} 
-
-######################################################################
-######################## LOAD EXPRESSION DATA ########################
-######################################################################
-
-message("Loading expression matrix")
-
-# load/open connection to expression matrix
-# NB: may be huge
-list_seuratObj <- lapply(vec_pathsDatExpr, function(vec_pathsDatExpr) {
-  if (grepl(pattern = "\\.loom", vec_pathsDatExpr)) {
-    dataObj <-  connect(filename = vec_pathsDatExpr, mode = "r+")
-  } else {
-    dataObj <- load_obj(vec_pathsDatExpr)
-  } 
-  if (!any(c("seurat","loom") %in% class(dataObj))) { # not a loom object, nor a seurat object
-    dataObj <- CreateSeuratObject(raw.data=dataObj, project= prefixOut, min.cells = -Inf, min.genes = -Inf)
-  } else if ("loom" %in% class(dataObj)) {
-    dataObj <- Seurat::Convert(from=dataObj, to="seurat")
-  } # if already a seurat object, do nothing
-  return(dataObj)
-})
-
-names(list_seuratObj) <- names(vec_pathsDatExpr)
-  
-# Add any further metadata coming from another file
-if (!is.null(list_datExprMetadata)) {
-  list_seuratObj<- mapply(function(seuratObj, datExpr_metadata) {
-    if (all_equal(rownames(datExpr_metadata), colnames(seuratObj@raw.data))) {
-      seuratObj <- AddMetaData(object = seuratObj, metadata = data.frame(datExpr_metadata))
-    }
-  }, seuratObj=list_seuratObj, datExpr_metadata=list_datExprMetadata, SIMPLIFY=F)
-}
-
-######################################################################
-###################### EXTRACT METADATA ##############################
-######################################################################
-
-list_metadata <- lapply(list_seuratObj, function(seuratObj) seuratObj@meta.data)
-names(list_metadata) <- names(vec_pathsDatExpr)
 
 ######################################################################
 ################### IF MATCHES NOT SPECIFIED, MATCH ALL TO ALL #######
@@ -274,14 +175,16 @@ names(list_metadata) <- names(vec_pathsDatExpr)
 # s02'=c('oligo1', 'oligo2','oligo3')), 'datExpr3'=list('microglia'=c('s01','s02'), 'oligo'=c('s03','s04')))''
 if (is.null(list_list_vec_identLvlsMatch)){
   list_list_vec_identLvlsMatch <- list()
-  for (lvlRef in sort(unique(df_geneModule[[colCellCluster]]))){ 
-    list_vec_identLvlsMatch <- list()
-    for (datExprName in names(list_seuratObj)) {    
-      identCol <- vec_metadataIdentCols[[datExprName]]
-      list_vec_identLvlsMatch[[datExprName]] <- sort(unique(list_metadata[[datExprName]][[identCol]]))
-    }
+  for (lvlRef in sort(unique(dt_geneMod[[colCellClust]]))){ 
+    if (nchar(lvlRef)>0 & !is.na(lvlRef)) {
+      list_vec_identLvlsMatch <- list()
+      for (datExprName in names(list_datExpr)) {    
+        identCol <- vec_metadataIdentCols[[datExprName]]
+        list_vec_identLvlsMatch[[datExprName]] <- sort(unique(list_metadata[[datExprName]][[identCol]]))
+      }
     #list_list_vec_identLvlsMatch[[datExprName]]
-    list_list_vec_identLvlsMatch[[lvlRef]] <- list_vec_identLvlsMatch
+      list_list_vec_identLvlsMatch[[lvlRef]] <- list_vec_identLvlsMatch
+    }
   }
 }
 
@@ -309,95 +212,6 @@ for (lvlTest in names(list_list_vec_identLvlsMatch)) {
 
 
 ######################################################################
-######################## MAP GENES TO SAME NAMES #####################
-######################################################################
-
-# TODO: make orthologue mapping function
-
-if (FALSE) {  
-  mapping = if (dataOrganism=="hsapiens") {
-    load_obj("/projects/tp/tmp-bmi-brain/data/mapping/gene_annotation_hsapiens.txt.gz")
-  } else if (dataOrganism=="mmusculus") {
-    load_obj("/projects/timshel/sc-genetics/sc-genetics/data/gene_annotations/Mus_musculus.GRCm38.90.gene_name_version2ensembl.txt.gz")
-  }  
-  
-  args <- list("X"=list_seuratObj)
-  fun <- function(seuratObj) {
-    if (any(grepl("ENSG|ENSMUSG",rownames(seuratObj@raw.data)))) {
-      current_ensembl <- T
-      tmp <- gene_map(dataIn = seuratObj@raw.data,
-                      colGene = NULL,
-                      mapping=mapping,
-                      from="ensembl",
-                      to="gene_name_optimal",
-                      replace = T,
-                      na.rm = T)
-    } else {
-      current_ensembl <- F
-      tmp <- seuratObj@raw.data
-    }
-    message("Counting percent ribo and percent mito")
-    idx_mito.genes <- grepl(pattern = "^mt-", x = rownames(tmp), ignore.case=T)
-    idx_ribo.genes <- grepl(pattern = "^Rp[sl][[:digit:]]", x = rownames(tmp), ignore.case=T)
-    percent_mito <- Matrix::colSums(tmp[idx_mito.genes, ])/Matrix::colSums(tmp)
-    percent_ribo <- Matrix::colSums(tmp[idx_ribo.genes, ])/Matrix::colSums(tmp)
-    seuratObj <- AddMetaData(object = seuratObj, metadata = percent_mito, col.name = "percent_mito")
-    seuratObj <- AddMetaData(object = seuratObj, metadata = percent_ribo, col.name = "percent_ribo")
-    if (grepl("ensembl", colGeneNames) & !current_ensembl) {
-      seuratObj@raw.data <- gene_map(dataIn = seuratObj@raw.data,
-                                      colGene = NULL,
-                                      mapping=mapping,
-                                      from="gene_name_optimal",
-                                      to="ensembl",
-                                      replace = T,
-                                      na.rm = T)
-    } else if (grepl("symbol|hgcn", colGeneNames) & current_ensembl) {
-      seuratObj@raw.data <- tmp
-    }
-    return(seuratObj)
-  }
-  # Call the function
-  list_seuratObj <- safeParallel(fun=fun, args=args, mapping=mapping)
-  rm(mapping)
-}
-######################################################################
-######################## NORMALIZE EXPRESSION DATA ###################
-######################################################################
-  
-message("Normalizing the expression data")
-
-args <- list("X"=list_seuratObj)
-fun <- function(seuratObj) NormalizeData(seuratObj)
-list_seuratObj <- safeParallel(fun=fun, args=args)
-
-######################################################################
-################# SCALE AND REGRESS EXPRESSION DATA ##################
-######################################################################
-
-if (scaleCenterRegress) {
-  message("scaling and regressing out confounders from the data")
-  
-  list_seuratObj<-lapply(X = list_seuratObj, FUN = function(seuratObj) ScaleData(seuratObj,
-                        vars.to.regress = c("percent_mito", "nUMI", "percent_ribo")[c("percent_mito", "nUMI", "percent_ribo") %in% colnames(seuratObj@meta.data)], 
-                        do.scale=scaleCenterRegress,
-                        do.center=scaleCenterRegress,
-                        display.progress= T, 
-                        do.par=scaleCenterRegress, 
-                        num.cores=10))
-}
-
-######################################################################
-############## EXTRACT SCALED DATA AND DELETE SEURAT OBJ #############
-######################################################################
-  
-list_datExpr <- lapply(list_seuratObj, function(seuratObj) {
-  out <- if (scaleCenterRegress) seuratObj@scale.data else seuratObj@data
-  return(t(out))
-  })
-names(list_datExpr) <- names(vec_pathsDatExpr)
-rm(list_seuratObj)
-
-######################################################################
 ############################ INITIALISE ##############################
 ######################################################################
 
@@ -420,10 +234,10 @@ fun1 = function(lvlRef)  {
   #### Get gene network coloring for cell_cluster ####
   ####################################################
   
-  idxDuplicateGenes <- duplicated(df_geneModule[[geneCol]][df_geneModule[[colCellCluster]] == lvlRef])
-  coloring <- df_geneModule[[colMod]][df_geneModule[[colCellCluster]] == lvlRef][!idxDuplicateGenes]
-  names(coloring) <- df_geneModule[[geneCol]][df_geneModule[[colCellCluster]] == lvlRef][!idxDuplicateGenes]
-  
+  #idxDuplicateGenes <- duplicated(dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef])
+  coloring <- dt_geneMod[[colMod]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
+  names(coloring) <- dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
+  coloring <- coloring[!is.na(coloring)] 
   ####################################################
   ############ Prepare reference dataset #############
   ####################################################
@@ -432,8 +246,8 @@ fun1 = function(lvlRef)  {
   metadataRef <- list_metadata[[1]]
   metadataColnameRef <- vec_metadataIdentCols[1]
   
-  idxLvlRefCells <- as.integer(na.omit(match(rownames(metadataRef)[(metadataRef[[metadataColnameRef]] == lvlRef)], 
-                                              rownames(list_datExpr[[datExprTestName]]))))
+  idxLvlRefCells <- as.integer(na.omit(match(metadataRef[[1]][metadataRef[[metadataColnameRef]] == lvlRef], 
+                                              rownames(list_datExpr[[1]]))))
   
   if (length(idxLvlRefCells) < minCellClusterSize) {
     datExprTest_presNwOut <- NA_character_
@@ -484,10 +298,15 @@ fun1 = function(lvlRef)  {
     
     for (lvlTest in list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]]) {
       
-      idxCells <- as.integer(na.omit(match(rownames(metadataTest)[metadataTest[[metadataColnameTest]] == lvlTest], 
+      idxCells <- as.integer(na.omit(match(metadataTest[[1]][metadataTest[[metadataColnameTest]] == lvlTest], 
                          rownames(list_datExpr[[datExprTestName]]))))
       datExprLvlTest <- list_datExpr[[datExprTestName]][idxCells, idxGenes]
       
+      vec_logicalGoodGenes <- goodSamplesGenes(datExprLvlTest)$goodGenes
+      datExprLvlTest <- datExprLvlTest[,vec_logicalGoodGenes]
+      
+      datExprRefLvl = datExprRefLvl[,colnames(datExprRefLvl) %in% colnames(datExprLvlTest)]
+  
       ######################################################################
       ################ Check that test subset has sufficient cells #########
       ######################################################################
@@ -528,7 +347,7 @@ fun1 = function(lvlRef)  {
     datExprTest_presNwOut[[datExprTestName]] <- 
       WGCNA::preservationNetworkConnectivity(multiExpr = multiData, 
                                              corFnc = corFnc, 
-                                             corOptions = NULL, 
+                                             corOptions = "use='pairwise.complete.obs'", 
                                              networkType = networkType, 
                                              power=8, 
                                              sampleLinks=T, 
@@ -545,11 +364,12 @@ fun1 = function(lvlRef)  {
 }
 
 outfile = paste0(dirLog, prefixOut, "_networkPreservation_log.txt")
-args=list("X"=names(list_list_vec_identLvlsMatch))
-lvlRef_datExprTest_presNwOut <- safeParallel(fun=fun1, args=args, outfile=outfile)
+list_iterable=list("X"=names(list_list_vec_identLvlsMatch))
+lvlRef_datExprTest_presNwOut <- safeParallel(fun=fun1, list_iterable = list_iterable, outfile=outfile)
 #lvlRef_datExprTest_presNwOut <- lapply(FUN=fun1,"X"=names(list_list_vec_identLvlsMatch))
 
 names(lvlRef_datExprTest_presNwOut) <- names(list_list_vec_identLvlsMatch)
+
 ######################################################################
 ################## RUN MODULE PRESERVATION ANALYSIS ##################
 ######################################################################
@@ -564,10 +384,10 @@ fun2 = function(lvlRef)  {
   #### Get gene network coloring for cell_cluster ####
   ####################################################
   
-  idxDuplicateGenes <- duplicated(df_geneModule[[geneCol]][df_geneModule[[colCellCluster]] == lvlRef])
-  coloring <- df_geneModule[[colMod]][df_geneModule[[colCellCluster]] == lvlRef][!idxDuplicateGenes]
-  names(coloring) <- df_geneModule[[geneCol]][df_geneModule[[colCellCluster]] == lvlRef][!idxDuplicateGenes]
-  
+  #idxDuplicateGenes <- duplicated(dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef])
+  coloring <- dt_geneMod[[colMod]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
+  names(coloring) <- dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
+  coloring <- coloring[!is.na(coloring)]
   ####################################################
   ############ Prepare reference dataset #############
   ####################################################
@@ -576,12 +396,15 @@ fun2 = function(lvlRef)  {
   metadataRef <- list_metadata[[1]]
   metadataColnameRef <- vec_metadataIdentCols[1]
   
-  idxLvlRefCells <- as.integer(na.omit(match(rownames(metadataRef)[(metadataRef[[metadataColnameRef]] == lvlRef)], 
-                                             rownames(list_datExpr[[datExprTestName]]))))
+  idxLvlRefCells <- as.integer(na.omit(match(metadataRef[[1]][(metadataRef[[metadataColnameRef]] == lvlRef)], 
+                                             rownames(list_datExpr[[1]]))))
   
   
   idxGenes <- as.integer(na.omit(match(names(coloring), colnames(list_datExpr[[1]]))))
   datExprRefLvl <- list_datExpr[[1]][idxLvlRefCells, idxGenes]
+  
+  vec_logicalGoodGenes <- goodSamplesGenes(datExprRefLvl)$goodGenes
+  datExprRefLvl <- datExprRefLvl[,vec_logicalGoodGenes]
   
   ######################################################################
   #### Filter out coloring genes which are missing in datExpr_ref ######
@@ -623,9 +446,12 @@ fun2 = function(lvlRef)  {
     
     for (lvlTest in list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]]) {
       
-      idxCells <- as.integer(na.omit(match(rownames(metadataTest)[(metadataTest[[metadataColnameTest]] == lvlTest)], 
+      idxCells <- as.integer(na.omit(match(metadataTest[[1]][(metadataTest[[metadataColnameTest]] == lvlTest)], 
                                            rownames(list_datExpr[[datExprTestName]]))))
       datExprLvlTest <- list_datExpr[[datExprTestName]][idxCells, idxGenes]
+      
+      vec_logicalGoodGenes <- goodSamplesGenes(datExprLvlTest)$goodGenes
+      datExprLvlTest <- datExprLvlTest[,vec_logicalGoodGenes]
       
       ######################################################################
       ################ Check that test subset has sufficient cells #########
@@ -682,7 +508,7 @@ fun2 = function(lvlRef)  {
                         dataIsExpr = TRUE,
                         networkType = networkType, 
                         corFnc = corFnc,
-                        corOptions = NULL,#list(use="pairwise.complete.obs"),#NULL, #if (corFnc == "cor") list(use = 'p') else NULL,
+                        corOptions = "use='pairwise.complete.obs'", NULL,#list(use="pairwise.complete.obs"),#NULL, #if (corFnc == "cor") list(use = 'p') else NULL,
                         referenceNetworks = 1, 
                         testNetworks = NULL,
                         nPermutations = 100, 
@@ -851,41 +677,6 @@ df_presStats <- dplyr::left_join(df_modPresStats, df_nwPresStats, by=c("ref_data
 ######################################################################
 
 saveMeta(savefnc= write.csv, x=df_presStats, file = paste0(dirTables, prefixOut, "_df_preservationStats.csv"), quote = F, row.names = F)
-# write.csv(x=df_nwPresStats, file = paste0(dirTables, prefixOut, "_df_nwPresStats.csv"), quote = F, row.names = F)
-#   
-
-######################################################################
-############### LOG PARAMETERS AND FILE VERSION ######################
-######################################################################
-# 
-# as.character(Sys.time()) %>% gsub("\\ ", "_",.) %>% gsub("\\:", ".", .) ->tStop
-# 
-# if (is.null(path_runLog)) path_runLog <- paste0(dirLog, "_preservation_runLog.txt")
-# 
-# dirCurrent = paste0(LocationOfThisScript(), "/") # need to have this function defined
-# setwd(dirCurrent) # this should be a git directory
-# 
-# # get the latest git commit
-# gitCommitEntry <- try(system2(command="git", args=c("log", "-n 1 --oneline"), stdout=TRUE))
-# 
-# # Write to text file
-# cat(text = "\n" , file =  path_runLog, append=T, sep = "\n")
-# cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
-# 
-# cat(text = prefixOut , file =  path_runLog, append=T, sep = "\n")
-# cat(sessionInfo()[[1]]$version.string, file=path_runLog, append=T, sep="\n")
-# if (!"try-error" %in% class(gitCommitEntry)) cat(text = paste0("git commit: ", gitCommitEntry) , file =  path_runLog, append=T, sep = "\n")
-# cat(text = paste0("tStart: ", tStart) , file =  path_runLog, append=T, sep = "\n")
-# cat(text = paste0("tStop: ", tStop) , file =  path_runLog, append=T, sep = "\n")
-# 
-# # output parameters (assumping use of optparse package)
-# cat(text = "\nPARAMETERS: " , file =  path_runLog, append=T, sep = "\n")
-# for (i in 1:length(opt)) {
-#   cat(text = paste0(names(opt)[i], "= ", opt[[i]]) , file =  path_runLog, append=T, sep = "\n")
-# }
-# 
-# cat(text = "##########################" , file =  path_runLog, append=T, sep = "\n")
-
 
 ############################ WRAP UP ################################
 
