@@ -23,6 +23,7 @@ source(here("perslab-sc-library", "utility_functions.R"))
 ########################### PACKAGES #################################
 ######################################################################
 
+suppressPackageStartupMessages(library("magrittr"))
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library("WGCNA"))
 suppressPackageStartupMessages(library("dplyr"))
@@ -55,8 +56,8 @@ option_list <- list(
               help="a quoted list of named lists, named by 'reference' celltype, of vectors of components designating 'test' celltype(s), e.g. ''list('L6_Nr4a2'=list('ep_ex'=c('Exc_L5-6_THEMIS_DCSTAMP', 'Exc_L5-6_THEMIS_CRABP1', 'Exc_L5-6_THEMIS_FGF10')), 'L3_Prss12'=list('ep_ex'=c('Exc_L3-4_RORB_CARM1P1')), 'L5_Grin3a'=list('ep_ex'=c('Exc_L4-5_RORB_FOLH1B','Exc_L4-5_RORB_DAPK2', 'Exc_L4-6_RORB_SEMA3E')))''. If the argument is left as NULL, will match each level to all others. [default %default]"),       #help = "quoted list of named character vectors with named components. List names are labelling levels (e.g. 'tissue', 'celltype'), vector names are column in datExpr metadata, vector values are regex to match levels. Use NA in a vector to skip a dataset for that labelling. E.g. ''list('tissue' = c(tissue='.*', NA), 'sub_celltype'=c(tissue_cell_type = '.*', ClusterName = '.*'))''"),
   make_option("--minCellClusterSize", type="integer", default=50L,
               help="Minimum number of cells in a cell_cluster, integer, [default %default]."),
-  make_option("--minGeneClusterSize", type="integer", default=10L,
-              help="Minimum number of genes in a module, integer, [default %default]."),
+  # make_option("--minGeneClusterSize", type="integer", default=10L,
+  #             help="Minimum number of genes in a module, integer, [default %default]."),
    make_option("--dirOut", type="character",
               help = "Outputs go to /tables and /RObjects subdirectories"),  
   make_option("--prefixOut", type="character", default = paste0(substr(gsub("-","",as.character(Sys.Date())),3,1000), "_", sample(x = 999, size = 1)),
@@ -89,7 +90,7 @@ vec_metadataIdentCols <- eval(parse(text=opt$vec_metadataIdentCols)) # cannot be
 list_list_vec_identLvlsMatch <- opt$list_list_vec_identLvlsMatch
 if (!is.null(list_list_vec_identLvlsMatch)) list_list_vec_identLvlsMatch <- eval(parse(text=list_list_vec_identLvlsMatch))
 minCellClusterSize <- opt$minCellClusterSize
-minGeneClusterSize <- opt$minGeneClusterSize
+#minGeneClusterSize <- opt$minGeneClusterSize
 colGeneNames <- opt$colGeneNames
 dirOut <- opt$dirOut
 prefixOut <- opt$prefixOut
@@ -149,10 +150,21 @@ list_datExpr <- lapply(vec_pathsDatExpr, function(pathDatExpr){
   if (any(duplicated(dt_datExpr[[1]]))) stop("datExpr has duplicate feature names, please ensure they are unique")
   datExpr <- as.matrix(dt_datExpr[,-1]) 
   rownames(datExpr) <- dt_datExpr[[1]]
-  return(t(datExpr))
+  datExpr <- t(datExpr)
+  return(datExpr)
 })
 
 names(list_datExpr) <- names(vec_pathsDatExpr)
+
+# ######################################################################
+# ######################### FILTER DATEXPR GENES #######################
+# ######################################################################
+# 
+# list_datExpr <- lapply(list_datExpr, function(datExpr){
+#   vec_logicalGoodGenes <- goodSamplesGenes(datExpr)$goodGenes
+#   datExpr[,vec_logicalGoodGenes]
+# })
+# instead to it for subsets (if at all)
 
 ######################################################################
 ####################### CHECK WHETHER REF LEVELS EXIST ###############
@@ -201,10 +213,10 @@ if (!all(names(list_list_vec_identLvlsMatch) %in% list_metadata[[1]][[vec_metada
 
 # check if the specified test levels exist in the metadata annotation
 
-for (lvlTest in names(list_list_vec_identLvlsMatch)) {
-  for (datExprTestName in names(list_list_vec_identLvlsMatch[[lvlTest]])) {
-    if(!all(list_list_vec_identLvlsMatch[[lvlTest]][[datExprTestName]] %in% list_metadata[[datExprTestName]][[vec_metadataIdentCols[datExprTestName]]])) {
-      missing = list_list_vec_identLvlsMatch[[lvlTest]][[datExprTestName]][!list_list_vec_identLvlsMatch[[lvlTest]][[datExprTestName]] %in% list_metadata[[datExprTestName]][vec_metadataIdentCols[datExprTestName]]]
+for (lvlRef in names(list_list_vec_identLvlsMatch)) {
+  for (datExprTestName in names(list_list_vec_identLvlsMatch[[lvlRef]])) {
+    if(!all(list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]] %in% list_metadata[[datExprTestName]][[vec_metadataIdentCols[datExprTestName]]])) {
+      missing = list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]][!list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]] %in% list_metadata[[datExprTestName]][vec_metadataIdentCols[datExprTestName]]]
       stop(paste0(missing, " not found in ", datExprTestName, " metadata", collapse=" "))
     }
   }
@@ -238,6 +250,7 @@ fun1 = function(lvlRef)  {
   coloring <- dt_geneMod[[colMod]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
   names(coloring) <- dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
   coloring <- coloring[!is.na(coloring)] 
+  
   ####################################################
   ############ Prepare reference dataset #############
   ####################################################
@@ -268,8 +281,8 @@ fun1 = function(lvlRef)  {
   ############ Filter out small modules ##############
   ####################################################
   
-  modsTooSmall <- names(table(coloring))[table(coloring)<minGeneClusterSize]
-  coloring <- coloring[!coloring %in% modsTooSmall]
+  # modsTooSmall <- names(table(coloring))[table(coloring)<minGeneClusterSize]
+  # coloring <- coloring[!coloring %in% modsTooSmall]
   
   ####################################################
   ############## Prepare test datasets ###############
@@ -284,27 +297,27 @@ fun1 = function(lvlRef)  {
     
     idxGenes <- as.integer(na.omit(match(names(coloring), colnames(list_datExpr[[datExprTestName]]))))
       
-    # filter out modules missing completely in datExprTest
-    mods_absent <- names(table(coloring))[!names(table(coloring)) %in% names(table(coloring[names(coloring) %in% colnames(list_datExpr[[datExprTestName]])[idxGenes]]))]
-    coloring_f <- coloring
-    coloring_f[coloring %in% mods_absent] <- "grey"
-    
-    # Filter out modules where fewer than half the genes present in datExprTest
-    vec_modPropGenesInTest <- table(coloring_f)/table(coloring[coloring %in% names(table(coloring_f))])
-    vec_modPropGenesInTestTooSmall<- names(vec_modPropGenesInTest[vec_modPropGenesInTest<0.5])
-    coloring_f <- coloring_f[!coloring_f %in% vec_modPropGenesInTestTooSmall]
+    coloring_f = coloring[names(coloring) %in% colnames(list_datExpr[[datExprTestName]])]
+    # # filter out modules missing completely in datExprTest
+    # mods_absent <- names(table(coloring))[!names(table(coloring)) %in% names(table(coloring[names(coloring) %in% colnames(list_datExpr[[datExprTestName]])[idxGenes]]))]
+    # coloring_f <- coloring
+    # coloring_f[coloring %in% mods_absent] <- "grey"
+    # 
+    # # Filter out modules where fewer than half the genes present in datExprTest
+    # vec_modPropGenesInTest <- table(coloring)/table(coloring[coloring %in% names(table(coloring_f))])
+    # vec_modPropGenesInTestTooSmall<- names(vec_modPropGenesInTest[vec_modPropGenesInTest<0.5])
+    # coloring_f <- coloring_f[!coloring_f %in% vec_modPropGenesInTestTooSmall]
 
     list_datExprTest <- list()
     
+    # subset the test dataset by annotation level; the genes are the same
     for (lvlTest in list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]]) {
       
       idxCells <- as.integer(na.omit(match(metadataTest[[1]][metadataTest[[metadataColnameTest]] == lvlTest], 
                          rownames(list_datExpr[[datExprTestName]]))))
       datExprLvlTest <- list_datExpr[[datExprTestName]][idxCells, idxGenes]
       
-      vec_logicalGoodGenes <- goodSamplesGenes(datExprLvlTest)$goodGenes
-      datExprLvlTest <- datExprLvlTest[,vec_logicalGoodGenes]
-      
+      # filter reference dataset so both dataset have same genes. (the genes are the same in all test lvl submatrices)
       datExprRefLvl = datExprRefLvl[,colnames(datExprRefLvl) %in% colnames(datExprLvlTest)]
   
       ######################################################################
@@ -403,12 +416,10 @@ fun2 = function(lvlRef)  {
   idxGenes <- as.integer(na.omit(match(names(coloring), colnames(list_datExpr[[1]]))))
   datExprRefLvl <- list_datExpr[[1]][idxLvlRefCells, idxGenes]
   
-  vec_logicalGoodGenes <- goodSamplesGenes(datExprRefLvl)$goodGenes
-  datExprRefLvl <- datExprRefLvl[,vec_logicalGoodGenes]
-  
   ######################################################################
   #### Filter out coloring genes which are missing in datExpr_ref ######
   ######################################################################
+  # shouldn't be any missing, but to be safe
   
   coloring <- coloring[names(coloring) %in% colnames(datExprRefLvl)]
   
@@ -416,8 +427,8 @@ fun2 = function(lvlRef)  {
   ############ Filter out small modules ##############
   ####################################################
   
-  modsTooSmall <- names(table(coloring))[table(coloring)<minGeneClusterSize]
-  coloring <- coloring[!coloring %in% modsTooSmall]
+  # modsTooSmall <- names(table(coloring))[table(coloring)<minGeneClusterSize]
+  # coloring <- coloring[!coloring %in% modsTooSmall]
   
   ####################################################
   ############## Prepare test datasets ###############
@@ -450,9 +461,7 @@ fun2 = function(lvlRef)  {
                                            rownames(list_datExpr[[datExprTestName]]))))
       datExprLvlTest <- list_datExpr[[datExprTestName]][idxCells, idxGenes]
       
-      vec_logicalGoodGenes <- goodSamplesGenes(datExprLvlTest)$goodGenes
-      datExprLvlTest <- datExprLvlTest[,vec_logicalGoodGenes]
-      
+      #datExprRefLvl = datExprRefLvl[,colnames(datExprRefLvl) %in% colnames(datExprLvlTest)]
       ######################################################################
       ################ Check that test subset has sufficient cells #########
       ######################################################################
@@ -534,10 +543,49 @@ fun2 = function(lvlRef)  {
                         parallelCalculation = T,#TRUE,
                         verbose = 3, 
                         indent = 0)}, error = function(err) {
-                          message(paste0(lvlRef, ": modulePreservation failed with the following error: ", err))
-                          write(x = paste0(lvlRef, ": modulePreservation failed with the following error: ", err), file = outfile,
+                          msg = paste0(lvlRef, ": modulePreservation failed with the following error: ", err, " - attempting with serial computation")
+                          message(msg)
+                          write(x = msg, file = outfile,
                                 ncolumns = 1, append = T)
+                          tryCatch({
+                          modulePreservation(multiData=multiData,
+                                            multiColor=multiColor,
+                                            dataIsExpr = TRUE,
+                                            networkType = networkType, 
+                                            corFnc = corFnc,
+                                            corOptions = "use='pairwise.complete.obs'", NULL,#list(use="pairwise.complete.obs"),#NULL, #if (corFnc == "cor") list(use = 'p') else NULL,
+                                            referenceNetworks = 1, 
+                                            testNetworks = NULL,
+                                            nPermutations = 100, 
+                                            includekMEallInSummary = FALSE,
+                                            restrictSummaryForGeneralNetworks = TRUE,
+                                            calculateQvalue = FALSE,
+                                            randomSeed = randomSeed*2, 
+                                            maxGoldModuleSize = 1000, 
+                                            maxModuleSize = 1000, 
+                                            quickCor = 0, # set to one to speed up/risk errors and inaccuracies 
+                                            ccTupletSize = 2, 
+                                            calculateCor.kIMall = FALSE,
+                                            calculateClusterCoeff = T,
+                                            useInterpolation = FALSE, 
+                                            checkData = TRUE, 
+                                            greyName = NULL, 
+                                            savePermutedStatistics = TRUE, 
+                                            loadPermutedStatistics = FALSE, 
+                                            permutedStatisticsFile = "permutedStats-actualModules.RData",#if (useInterpolation) "permutedStats-intrModules.RData" else "permutedStats-actualModules.RData", 
+                                            plotInterpolation = TRUE, 
+                                            interpolationPlotFile = "modulePreservationInterpolationPlots.pdf", 
+                                            discardInvalidOutput = TRUE,
+                                            parallelCalculation = F,#TRUE,
+                                            verbose = 3, 
+                                            indent = 0)
+                          }, error = function(err) {
+                            msg = paste0(lvlRef, ": modulePreservation failed a second time the following error: ", err, " - returning NA_character_")
+                            message(msg)
+                            write(x = msg, file = outfile,
+                                  ncolumns = 1, append = T)
                           return(NA_character_)
+                          })
                         })
                            
   }
