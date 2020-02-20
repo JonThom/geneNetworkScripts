@@ -56,6 +56,10 @@ option_list <- list(
               help="a quoted list of named lists, named by 'reference' celltype, of vectors of components designating 'test' celltype(s), e.g. ''list('L6_Nr4a2'=list('ep_ex'=c('Exc_L5-6_THEMIS_DCSTAMP', 'Exc_L5-6_THEMIS_CRABP1', 'Exc_L5-6_THEMIS_FGF10')), 'L3_Prss12'=list('ep_ex'=c('Exc_L3-4_RORB_CARM1P1')), 'L5_Grin3a'=list('ep_ex'=c('Exc_L4-5_RORB_FOLH1B','Exc_L4-5_RORB_DAPK2', 'Exc_L4-6_RORB_SEMA3E')))''. If the argument is left as NULL, will match each level to all others. [default %default]"),       #help = "quoted list of named character vectors with named components. List names are labelling levels (e.g. 'tissue', 'celltype'), vector names are column in datExpr metadata, vector values are regex to match levels. Use NA in a vector to skip a dataset for that labelling. E.g. ''list('tissue' = c(tissue='.*', NA), 'sub_celltype'=c(tissue_cell_type = '.*', ClusterName = '.*'))''"),
   make_option("--minCellClusterSize", type="integer", default=50L,
               help="Minimum number of cells in a cell_cluster, integer, [default %default]."),
+  make_option("--minpropModGenesInTestLvl", type="numeric", default=0.5,
+              help="Minimum proportion of module genes in the test expression dataset [default %default]."),
+  make_option("--minPropModGenesNon0inTestLvl", type="numeric", default=0.1,
+              help="Minimum number of module genes not uniformly zero in test expression data subset, numeric, [default %default]."),
   # make_option("--minGeneClusterSize", type="integer", default=10L,
   #             help="Minimum number of genes in a module, integer, [default %default]."),
    make_option("--dirOut", type="character",
@@ -90,6 +94,8 @@ vec_metadataIdentCols <- eval(parse(text=opt$vec_metadataIdentCols)) # cannot be
 list_list_vec_identLvlsMatch <- opt$list_list_vec_identLvlsMatch
 if (!is.null(list_list_vec_identLvlsMatch)) list_list_vec_identLvlsMatch <- eval(parse(text=list_list_vec_identLvlsMatch))
 minCellClusterSize <- opt$minCellClusterSize
+minpropModGenesInTestLvl <- opt$minpropModGenesInTestLvl
+minPropModGenesNon0inTestLvl <- opt$minPropModGenesNon0inTestLvl
 #minGeneClusterSize <- opt$minGeneClusterSize
 colGeneNames <- opt$colGeneNames
 dirOut <- opt$dirOut
@@ -321,6 +327,23 @@ fun1 = function(lvlRef)  {
       datExprRefLvl = datExprRefLvl[,colnames(datExprRefLvl) %in% colnames(datExprLvlTest)]
   
       ######################################################################
+      ################# CHECK SUBSETS FOR GOOD GENES & SAMPLES #############
+      ######################################################################
+      
+      # We will record this in the module preservation loop
+      
+      vec_logicalGoodGenes <- goodSamplesGenes(datExprLvlTest)$goodGenes
+      vec_logicalGoodSamples <- goodSamplesGenes(datExprLvlTest)$goodSamples
+      
+      # names(vec_logicalGoodGenes) <- colnames(datExprLvlTest)
+      # names(vec_logicalGoodSamples) <- rownames(datExprLvlTest)
+      # 
+      # datExprTest_testLvlGoodSamples[[datExprTestName]][[lvlTest]] <- vec_logicalGoodSamples
+      # datExprTest_testLvlGoodGenes[[datExprTestName]][[lvlTest]] <- datExprLvlTest
+      # 
+      datExprLvlTest <- datExprLvlTest[vec_logicalGoodSamples,vec_logicalGoodGenes]
+      
+      ######################################################################
       ################ Check that test subset has sufficient cells #########
       ######################################################################
       
@@ -392,44 +415,38 @@ require("doParallel")
 fun2 = function(lvlRef)  {
   
   datExprTest_presModsOut <- list()
-
+  
+  datExprTest_propModGenesInTestLvl <- list()
+  datExprTest_propModGenesNon0inTestLvl <- list()
+  datExprTest_testLvlGoodSamples <- list()
+  datExprTest_testLvlGoodGenes <- list()
+  
   ####################################################
   #### Get gene network coloring for cell_cluster ####
   ####################################################
-  
-  #idxDuplicateGenes <- duplicated(dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef])
+
+  # get gene module allocations (coloring)
   coloring <- dt_geneMod[[colMod]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
   names(coloring) <- dt_geneMod[[colGeneNames]][dt_geneMod[[colCellClust]] == lvlRef]#[!idxDuplicateGenes]
   coloring <- coloring[!is.na(coloring)]
+  
   ####################################################
   ############ Prepare reference dataset #############
   ####################################################
   
-  # Get metadata df
+  # Get metadata df for reference data
   metadataRef <- list_metadata[[1]]
   metadataColnameRef <- vec_metadataIdentCols[1]
   
   idxLvlRefCells <- as.integer(na.omit(match(metadataRef[[1]][(metadataRef[[metadataColnameRef]] == lvlRef)], 
                                              rownames(list_datExpr[[1]]))))
   
-  
+
+  # match 'coloring' genes to reference expression data column names (genes). All genes should be there and order should match!!
   idxGenes <- as.integer(na.omit(match(names(coloring), colnames(list_datExpr[[1]]))))
   datExprRefLvl <- list_datExpr[[1]][idxLvlRefCells, idxGenes]
-  
-  ######################################################################
-  #### Filter out coloring genes which are missing in datExpr_ref ######
-  ######################################################################
-  # shouldn't be any missing, but to be safe
-  
   coloring <- coloring[names(coloring) %in% colnames(datExprRefLvl)]
-  
-  ####################################################
-  ############ Filter out small modules ##############
-  ####################################################
-  
-  # modsTooSmall <- names(table(coloring))[table(coloring)<minGeneClusterSize]
-  # coloring <- coloring[!coloring %in% modsTooSmall]
-  
+
   ####################################################
   ############## Prepare test datasets ###############
   ####################################################
@@ -441,27 +458,67 @@ fun2 = function(lvlRef)  {
     metadataTest <- list_metadata[[datExprTestName]]
     metadataColnameTest <- vec_metadataIdentCols[datExprTestName]
     
-    idxGenes <- as.integer(na.omit(match(names(coloring), colnames(list_datExpr[[datExprTestName]]))))
-    
-    # filter out modules missing completely in datExprTest
-    mods_absent <- names(table(coloring))[!names(table(coloring)) %in% names(table(coloring[names(coloring) %in% colnames(list_datExpr[[datExprTestName]])[idxGenes]]))]
-    coloring_f <- coloring
-    coloring_f[coloring %in% mods_absent] <- "grey"
-    
-    # Filter out modules where fewer than half the genes present in datExprTest
-    vec_modPropGenesInTest <- table(coloring_f)/table(coloring[coloring %in% names(table(coloring_f))])
-    vec_modPropGenesInTestTooSmall<- names(vec_modPropGenesInTest[vec_modPropGenesInTest<0.5])
-    coloring_f <- coloring_f[!coloring_f %in% vec_modPropGenesInTestTooSmall]
-    
     list_datExprTest <- list()
     
+    datExprTest_propModGenesNon0inTestLvl[[datExprTestName]] <- list()
+    datExprTest_propModGenesInTestLvl[[datExprTestName]] <- list()
+    datExprTest_testLvlGoodSamples[[datExprTestName]] <- list()
+    datExprTest_testLvlGoodGenes[[datExprTestName]] <- list()
+    
     for (lvlTest in list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]]) {
-      
+
       idxCells <- as.integer(na.omit(match(metadataTest[[1]][(metadataTest[[metadataColnameTest]] == lvlTest)], 
                                            rownames(list_datExpr[[datExprTestName]]))))
+      
+      # this is going to be the same for each lvl within datExprTestName since the genes are the same
+      # no need to subset by idxCells here
+      datExprTest_propModGenesInTestLvl[[datExprTestName]][[lvlTest]] <- 
+        sapply(unique(coloring), 
+               function(module) {
+                 sum(names(coloring)[coloring==module] %in% colnames(list_datExpr[[datExprTestName]])) / 
+                   length(coloring[coloring==module])})
+      
+      datExprTest_propModGenesNon0inTestLvl[[datExprTestName]][[lvlTest]] <- 
+        sapply(unique(coloring), 
+                function(module) {
+                  if (datExprTest_propModGenesInTestLvl[[datExprTestName]][[lvlTest]][module] < minpropModGenesInTestLvl) {
+                    return(NA) # if not enough module genes are included in datExpr lvlRef sub 
+                  } else {
+                    # return the prop of mod genes with above-0 expression
+                    logicalGenes = colnames(list_datExpr[[datExprTestName]]) %in% 
+                      names(coloring[coloring==module])
+                    return(
+                      sum(colSums(list_datExpr[[datExprTestName]][idxCells, logicalGenes])>0) / 
+                        length(coloring[coloring==module]))
+                  }}) 
+      
+      
+      mods_absent = names(datExprTest_propModGenesNon0inTestLvl[[datExprTestName]][[lvlTest]]) %>% 
+        '['(datExprTest_propModGenesInTestLvl[[datExprTestName]][[lvlTest]] < minpropModGenesInTestLvl |
+              datExprTest_propModGenesNon0inTestLvl[[datExprTestName]][[lvlTest]] < minPropModGenesNon0inTestLvl)
+      
+      coloring_f <- coloring
+      coloring_f[coloring_f %in% mods_absent] <- "grey"
+      
+      idxGenes <- as.integer(na.omit(match(names(coloring_f), colnames(list_datExpr[[datExprTestName]]))))
+      
       datExprLvlTest <- list_datExpr[[datExprTestName]][idxCells, idxGenes]
       
-      #datExprRefLvl = datExprRefLvl[,colnames(datExprRefLvl) %in% colnames(datExprLvlTest)]
+      ######################################################################
+      ####################### Filter genes and samples #####################
+      ######################################################################
+      
+      vec_logicalGoodGenes <- goodSamplesGenes(datExprLvlTest)$goodGenes
+      vec_logicalGoodSamples <- goodSamplesGenes(datExprLvlTest)$goodSamples
+      
+      names(vec_logicalGoodGenes) <- colnames(datExprLvlTest)
+      names(vec_logicalGoodSamples) <- rownames(datExprLvlTest)
+        
+      datExprTest_testLvlGoodSamples[[datExprTestName]][[lvlTest]] <- vec_logicalGoodSamples
+      datExprTest_testLvlGoodGenes[[datExprTestName]][[lvlTest]] <- datExprLvlTest
+      
+      datExprLvlTest <- datExprLvlTest[vec_logicalGoodSamples,vec_logicalGoodGenes]
+        
       ######################################################################
       ################ Check that test subset has sufficient cells #########
       ######################################################################
@@ -589,14 +646,33 @@ fun2 = function(lvlRef)  {
                         })
                            
   }
-  return(datExprTest_presModsOut)
+  return(list("propModGenesInTestLvl" = datExprTest_propModGenesInTestLvl,
+              "propModGenesNon0inTestLvl" = datExprTest_propModGenesNon0inTestLvl,
+              "goodSamples" = datExprTest_testLvlGoodSamples,
+              "goodGenes" = datExprTest_testLvlGoodGenes,
+              "presModsOut"=datExprTest_presModsOut))
 }
 
 outfile = paste0(dirLog, prefixOut, "_modulePreservation_log.txt")
 #args=list("X"=names(list_list_vec_identLvlsMatch))
 #lvlRef_datExprTest_presModsOut <- safeParallel(fun=fun2, args=args, outfile=outfile)
-lvlRef_datExprTest_presModsOut <- lapply(FUN=fun2,"X"=names(list_list_vec_identLvlsMatch))
-names(lvlRef_datExprTest_presModsOut) <- names(list_list_vec_identLvlsMatch)
+list_presModsOut <- lapply(FUN=fun2,"X"=names(list_list_vec_identLvlsMatch))
+
+names(list_presModsOut) <- names(list_list_vec_identLvlsMatch)
+
+datExprTest_testLvlGoodSamples = list()
+datExprTest_testLvlGoodGenes <- list()
+lvlRef_datExprTest_propModGenesInTestLvl <- list()
+lvlRef_datExprTest_propModgenesNon0inTestLvlOut <- list()
+lvlRef_datExprTest_presModsOut <- list()
+
+for (refLvl in names(list_presModsOut)) {
+  datExprTest_testLvlGoodSamples[[refLvl]] <- list_presModsOut[[refLvl]][["goodSamples"]]
+  datExprTest_testLvlGoodGenes[[refLvl]] <- list_presModsOut[[refLvl]][["goodGenes"]]
+  lvlRef_datExprTest_propModGenesInTestLvl[[refLvl]] <- list_presModsOut[[refLvl]][["propModGenesInTestLvl"]]
+  lvlRef_datExprTest_propModgenesNon0inTestLvlOut[[refLvl]] <- list_presModsOut[[refLvl]][["propModGenesNon0inTestLvl"]] 
+  lvlRef_datExprTest_presModsOut[[refLvl]] <- list_presModsOut[[refLvl]][["presModsOut"]]
+}
 
 ######################################################################
 ################# REFORMAT MODULE PRESERVATION SCORES ################
@@ -684,41 +760,107 @@ df_modPresStats <- df_modPresStats[!df_modPresStats[["module"]]=="gold",]
 ######################################################################
 ########### GET NETWORK CONNECTIVITY PRESERVATION STATS ##############
 ######################################################################
-df_nwPresStats <- data.frame(ref_dataset=NA_character_, 
-                         ref_lvl=NA_character_, 
-                         test_dataset=NA_character_, 
-                         test_lvl =NA_character_)
+df_nwPresStats = NULL
 
-
-k=0
-for (lvlRef in names(lvlRef_datExprTest_presNwOut)) { 
-  datExprTest_presNwOut <- lvlRef_datExprTest_presNwOut[[lvlRef]]
-  if (all(is.na(datExprTest_presNwOut))) next
-    for (datExprTestName in names(datExprTest_presNwOut)) {
-      presNwOut <- datExprTest_presNwOut[[datExprTestName]]
-      if (all(is.na(presNwOut))) next
-      for (i in 1:ncol(presNwOut[["pairwise"]])) {
-        k=k+1
-        df_nwPresStats[k,"ref_dataset"] <- names(vec_pathsDatExpr)[1]
-        df_nwPresStats[k,"ref_lvl"] <- lvlRef
-        df_nwPresStats[k,"test_dataset"] <- datExprTestName
-        df_nwPresStats[k,"test_lvl"] <- list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]][i]
-        df_nwPresStats[k,"network_pairwise_min"] <- min(presNwOut[["pairwise"]][,i])
-        df_nwPresStats[k,"network_pairwise_median"] <- median(presNwOut[["pairwise"]][,i])
-        df_nwPresStats[k,"network_pairwise_max"] <- max(presNwOut[["pairwise"]][,i])
-        df_nwPresStats[k,"network_pairwiseWeighted_min"] <- min(presNwOut[["pairwiseWeighted"]][,i])
-        df_nwPresStats[k,"network_pairwiseWeighted_median"] <- median(presNwOut[["pairwiseWeighted"]][,i])
-        df_nwPresStats[k,"network_pairwiseWeighted_max"] <- max(presNwOut[["pairwiseWeighted"]][,i])
+if (!is.null(lvlRef_datExprTest_presNwOut)) {
+  
+  df_nwPresStats <- data.frame(ref_dataset=NA_character_, 
+                           ref_lvl=NA_character_, 
+                           test_dataset=NA_character_, 
+                           test_lvl =NA_character_)
+  
+  
+  k=0
+  for (lvlRef in names(lvlRef_datExprTest_presNwOut)) { 
+    datExprTest_presNwOut <- lvlRef_datExprTest_presNwOut[[lvlRef]]
+    if (all(is.na(datExprTest_presNwOut))) next
+      for (datExprTestName in names(datExprTest_presNwOut)) {
+        presNwOut <- datExprTest_presNwOut[[datExprTestName]]
+        if (all(is.na(presNwOut))) next
+        for (i in 1:ncol(presNwOut[["pairwise"]])) {
+          k=k+1
+          df_nwPresStats[k,"ref_dataset"] <- names(vec_pathsDatExpr)[1]
+          df_nwPresStats[k,"ref_lvl"] <- lvlRef
+          df_nwPresStats[k,"test_dataset"] <- datExprTestName
+          df_nwPresStats[k,"test_lvl"] <- list_list_vec_identLvlsMatch[[lvlRef]][[datExprTestName]][i]
+          df_nwPresStats[k,"network_pairwise_min"] <- min(presNwOut[["pairwise"]][,i])
+          df_nwPresStats[k,"network_pairwise_median"] <- median(presNwOut[["pairwise"]][,i])
+          df_nwPresStats[k,"network_pairwise_max"] <- max(presNwOut[["pairwise"]][,i])
+          df_nwPresStats[k,"network_pairwiseWeighted_min"] <- min(presNwOut[["pairwiseWeighted"]][,i])
+          df_nwPresStats[k,"network_pairwiseWeighted_median"] <- median(presNwOut[["pairwiseWeighted"]][,i])
+          df_nwPresStats[k,"network_pairwiseWeighted_max"] <- max(presNwOut[["pairwiseWeighted"]][,i])
+      }
+      # will come out as character vector
     }
-    # will come out as character vector
   }
 }
 
 ######################################################################
-########################### JOIN RESULTS #############################
+#################### JOIN PRESERVATION RESULTS #############################
 ######################################################################
 
-df_presStats <- dplyr::left_join(df_modPresStats, df_nwPresStats, by=c("ref_dataset","ref_lvl", "test_dataset", "test_lvl"))
+if (!is.null(df_nwPresStats)){
+  df_presStats <- dplyr::left_join(df_modPresStats, df_nwPresStats, by=c("ref_dataset","ref_lvl", "test_dataset", "test_lvl"))
+}
+
+######################################################################
+### ADD GOODGENES, GOODSAMPLES, PROP GENES NOT NA, PROP GENES NOT 0 ##
+######################################################################
+
+df_presStats[["propModGenesInTestLvl"]] <- rep(NA,nrow(df_presStats))
+df_presStats[["propModgenesNon0inTestLvlOut"]] <- rep(NA,nrow(df_presStats))
+
+for (lvlRef in names(lvlRef_datExprTest_propModGenesInTestLvl)) {
+  for (datExprTest in names(lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]])) {
+    for (lvlTest in names(lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]][[datExprTest]])) {
+      for (module in names(lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]][[datExprTest]][[lvlTest]])) {
+        
+        logical_row <- df_presStats$test_dataset == datExprTest &
+                          df_presStats$ref_lvl == lvlRef &
+                          df_presStats$module == module
+        if (sum(logical_row)>1) { stop("error : more than one row matches") 
+        } else if (sum(logical_row)==0) {
+          for (lvlRef in names(lvlRef_datExprTest_propModGenesInTestLvl)) {
+            for (datExprTest in names(lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]])) {
+              for (lvlTest in names(lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]][[datExprTest]])) {
+                for (module in names(lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]][[datExprTest]][[lvlTest]])) {
+                  
+                  logical_row <- df_presStats$test_dataset == datExprTest &
+                    df_presStats$ref_lvl == lvlRef &
+                    df_presStats$module == module
+                  if (sum(logical_row)==1) {
+                    df_presStats[["propModGenesInTestLvl"]][logical_row] <- lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]][[datExprTest]][[lvlTest]][module]
+                    df_presStats[["propModgenesNon0inTestLvlOut"]][logical_row] <- lvlRef_datExprTest_propModgenesNon0inTestLvlOut[[lvlRef]][[datExprTest]][[lvlTest]][module]
+                  } else if (sum(logical_row)>1) { 
+                    stop("error : more than one row matches") 
+                  } else if (sum(logical_row)==0) {
+                    df_presStats <- rbind(df_presStats, vector(NA, length = ncol(df_presStats)))
+                    df_presStats[["ref_dataset"]][nrow(df_presStats)] <- names(vec_pathsDatExpr)[1]
+                    df_presStats[["ref_lvl"]][nrow(df_presStats)] <- lvlRef
+                    df_presStats[["test_lvl"]][nrow(df_presStats)] <- lvlTest
+                    df_presStats[["module"]][nrow(df_presStats)] <- module
+                    df_presStats[["propModGenesInTestLvl"]][nrow(df_presStats)] <- lvlRef_datExprTest_propModGenesInTestLvl[[lvlRef]][[datExprTest]][[lvlTest]][module]
+                    df_presStats[["propModgenesNon0inTestLvlOut"]][nrow(df_presStats)] <- lvlRef_datExprTest_propModgenesNon0inTestLvlOut[[lvlRef]][[datExprTest]][[lvlTest]][module]
+                  } 
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+df_presStats[["propModGenesInTestLvl"]] <- 
+  
+datExprTest_testLvlGoodSamples
+datExprTest_testLvlGoodGenes
+lvlRef_datExprTest_propModGenesInTestLvl
+lvlRef_datExprTest_propModgenesNon0inTestLvlOut
+
+
+
 
 ######################################################################
 ############################ OUTPUTS #################################
