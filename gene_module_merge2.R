@@ -442,7 +442,7 @@ while (T) {
 ############################ WRAP UP #################################
 ######################################################################
 
-data.table::fwrite(x = dt_geneMod, file= gzfile(paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv.gz")), compress="gzip")
+data.table::fwrite(x = dt_geneMod, file= paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv.gz"), compress="gzip")
 
 ############################### FINISH ##################################
 
