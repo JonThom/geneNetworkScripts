@@ -28,10 +28,13 @@ library("optparse")
 ########################### OPTPARSE #################################
 ######################################################################
 
-
 option_list <- list(
   make_option("--path_df_NWA", type="character",
               help = "path to dataframe from a gene network analysis run, in long format (i.e. one row per gene per celltype), containing 'cell_cluster', 'module', one or two gene name columns, and a column of numeric scores. I.e. one row per gene, e.g. rwgcna cell_cluster_module_genes.csv files"),  
+  make_option("--colModule", type="character", default ="module",
+              help = "nwa_df column with modules, [default %default]"),
+  make_option("--colCellClust", type="character", default ="cell_cluster",
+              help = "nwa_df column with modules, [default %default]"),
   make_option("--colGeneWeights", type="character", default ="pk.*M",
               help = "nwa_df column with gene weights, , [default %default]"),  
   make_option("--colGeneNames", type="character", default="genes",
@@ -42,6 +45,8 @@ option_list <- list(
               help = "At the end of each iteration, multiply the minPropIntersect threshold by some numeric constant >= 1 to help ensure convergence given that merging modules increases the probability that others will have a large overlap with them, [default %default]"),
   make_option("--minWeightedCor", type="numeric", default = 0.7,
               help = "if module j has at least minPropIntersect genes also in module i, set minimum correlation weighted by gene weight, to discard j or merge j into i, [default %default]"),
+  make_option("--cellClusters_keep", type="character", default = NULL,
+              help = "quoted vector of character, e.g. ''c('hepatocytes', 'stellate_cells')''. If provided, when comparing a module of this celltype with a module of another celltype, the script will always keep the former, overriding usual behaviour [default %default]"),
   make_option("--corMethod", type="character", default = "pearson",
               help = "pearson, spearman or kendall, [default %default]"),
   make_option("--mergeOrPrune", type="character", default = "prune",
@@ -61,7 +66,6 @@ option_list <- list(
 
 library("here")
 
-
 ######################################################################
 ######################### SOURCE FUNCTIONS ################################
 ######################################################################
@@ -75,6 +79,8 @@ source(here("perslab-sc-library", "utility_functions.R"))
 opt <- parse_args(OptionParser(option_list=option_list))
 
 path_df_NWA <- opt$path_df_NWA 
+colModule <- opt$colModule
+colCellClust <- opt$colCellClust
 colGeneWeights <- opt$colGeneWeights
 colGeneNames <- opt$colGeneNames
 maxIter <- opt$maxIter
@@ -85,6 +91,8 @@ mergeOrPrune = opt$mergeOrPrune
 minPropIntersect <- opt$minPropIntersect
 minPropIntersect_iter_increase <- opt$minPropIntersect_iter_increase
 minWeightedCor <- opt$minWeightedCor
+cellClusters_keep <- opt$cellClusters_keep
+if (!is.null(cellClusters_keep)) cellClusters_keep <- eval(parse(text=cellClusters_keep))
 doPlot <- opt$doPlot
 RAMGbMax <- opt$RAMGbMax
 
@@ -92,7 +100,8 @@ RAMGbMax <- opt$RAMGbMax
 ########################### PACKAGES #################################
 ######################################################################
 
-library("dplyr")
+library("data.table")
+library("magrittr")
 library("Matrix")
 library("parallel")
 library("WGCNA")
@@ -141,19 +150,19 @@ set.seed(seed = randomSeed)
 
 message("Loading gene module data")
 
-df_geneModule <- load_obj(path_df_NWA)
+dt_geneMod <- data.table::fread(path_df_NWA)
 
-colGeneNames <- grep(colGeneNames, colnames(df_geneModule), value=T)
-colGeneWeights <- grep(colGeneWeights, colnames(df_geneModule), value=T)#colnames(df_geneModule)[which(sapply(X=colnames(df_geneModule), FUN =function(colname) class(df_geneModule[[colname]]))=="numeric")]
+colGeneNames <- grep(colGeneNames, colnames(dt_geneMod), value=T)
+colGeneWeights <- grep(colGeneWeights, colnames(dt_geneMod), value=T)#colnames(dt_geneMod)[which(sapply(X=colnames(dt_geneMod), FUN =function(colname) class(dt_geneMod[[colname]]))=="numeric")]
 
 ######################################################################
 ###################### INITIALISE MERGE LOOP #########################
 ######################################################################
 
-df_geneModule[["module_merged"]] <- df_geneModule[["module"]]
-df_geneModule[["cell_cluster_merged"]] <- df_geneModule[["cell_cluster"]]
+dt_geneMod[["module_merged"]] <- dt_geneMod[[colModule]]
+dt_geneMod[["cell_cluster_merged"]] <- dt_geneMod[[colCellClust]]
 
-#df_geneModule[[paste0(colGeneWeights, "_merged")]] <- df_geneModule[[colGeneWeights]] 
+#dt_geneMod[[paste0(colGeneWeights, "_merged")]] <- dt_geneMod[[colGeneWeights]] 
 #pathLog <- paste0(dirLog, prefixOut, "_mod_merge_log.txt")
 iteration=1
 modules_to_exclude <- c()
@@ -165,10 +174,11 @@ while (T) {
   ########################### GET MODULES ##############################
   ######################################################################
   
-  unique(df_geneModule[["module_merged"]]) %>% sort %>% na.omit %>% as.character -> modules  
+  unique(dt_geneMod[["module_merged"]]) %>% sort %>% na.omit %>% as.character -> modules  
   
   modules <- modules[!modules %in% modules_to_exclude]
   
+  modules <- modules[nchar(modules)>0]
   ######################################################################
   ######################## GET GENE WEIGHT VECTORS #####################
   ######################################################################
@@ -177,8 +187,9 @@ while (T) {
   message("Getting gene weight vectors")
   
   fun <- function(module) {
-    df_geneModule[[colGeneWeights]] %>% '['(df_geneModule[["module_merged"]]==module) %>% na.omit %>% as.numeric ->geneWeights 
-    df_geneModule[[colGeneNames]] %>% '['(df_geneModule[["module_merged"]]==module) %>% na.omit %>% as.character -> names(geneWeights) 
+    dt_geneMod[[colGeneWeights]] %>% '['(dt_geneMod[["module_merged"]]==module) %>% na.omit %>% as.numeric -> geneWeights 
+    dt_geneMod[[colGeneNames]] %>% '['(dt_geneMod[["module_merged"]]==module) %>% na.omit  %>% as.character -> names(geneWeights) 
+    geneWeights <- geneWeights[nchar(names(geneWeights))>0]
     return(geneWeights)
   }
   
@@ -249,8 +260,9 @@ while (T) {
   mat_modIntersectCorrWeighted <- matrix(data=0, nrow=nrow(mat_moduleGeneIntersect), ncol=ncol(mat_moduleGeneIntersect))
   dimnames(mat_modIntersectCorrWeighted) <- dimnames(mat_moduleGeneIntersect)
   
-  # Find columns of the overlap matrix with a big intersect
+  # traverse intersect matrix columns, find any where the max intersect is large
   idx_colBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, FUN=function(j) max(j) >= minPropIntersect)  %>% which
+  # traverse columns, find the row that the intersect is large with
   idx_rowBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, which.max) %>% '['(idx_colBigIntersect)
    
   if (length(idx_colBigIntersect)==0) {
@@ -265,8 +277,10 @@ while (T) {
     genesIntersect <- base::intersect(names(list_geneWeights[[j]]), names(list_geneWeights[[i]]))
     mat_modIntersectCorrWeighted[i,j] <- WGCNA::cor(x = list_geneWeights[[j]][match(genesIntersect, names(list_geneWeights[[j]]))], 
                                                      weights.x = list_geneWeights[[j]][match(genesIntersect, names(list_geneWeights[[j]]))],
+                                                    # correlate the jth column
                                                      y= list_geneWeights[[i]][match(genesIntersect, names(list_geneWeights[[i]]))],
                                                      weights.y = list_geneWeights[[i]][match(genesIntersect, names(list_geneWeights[[i]]))],
+                                                    # with the ith row
                                                      method = corMethod, 
                                                      quick=0.25, 
                                                      verbose=F, 
@@ -274,36 +288,6 @@ while (T) {
       
     
   }
-  
-  # for (k in 1:length(idx_colBigIntersect)) {
-  #   j=idx_colBigIntersect[k]
-  #   i=idx_rowBigIntersect[k]
-  #   print(mat_modIntersectCorrWeighted[i,j])
-  # }
-  
-  #list_iterable = list("X"=list_geneWeights)
-  
-  # the outer loop goes in the columns, the inner loop goes in the rows
-  
-
-  # fun = function(geneWeights) {
-  #   sapply(list_geneWeights, function(geneWeightsother) {
-  #     genesintersect <- base::intersect(names(geneWeights), names(geneWeightsother))
-  #     propIntersect <- length(genesintersect)/length(geneWeights) 
-  #     if (propIntersect>=minPropIntersect) {
-  #       intersectCorrWeighted <-   
-  #       return(intersectCorrWeighted)
-  #       
-  #     } else {
-  #       return(0)
-  #     }
-  #   }, simplify=T)
-  # }
-  
-  #mat_modIntersectCorrWeighted <- safeParallel(fun=fun,list_iterable=list_iterable, simplify = T)
-  
-  # set diagonal to zero
-  #mat_modIntersectCorrWeighted[col(mat_modIntersectCorrWeighted)==row(mat_modIntersectCorrWeighted)] <- 0
   
   ######################################################################
   ############### Plot the overlap weighted correlation matrix #########
@@ -321,7 +305,7 @@ while (T) {
              is.corr=F,
              title=paste0(prefixOut, ": weighted correlation of mod j's intersection with mod i, iteration ", iteration),
              order = "original",#"hclust",
-             hclust.method = "average",
+             #hclust.method = "average",
              addCoef.col = "black",
              tl.srt = 45,
              number.digits = 2L,
@@ -375,36 +359,59 @@ while (T) {
     break
   }
   
-  ### Merge module j into i in df_geneModule dataframe:
+  ### Merge module j into i in dt_geneMod dataframe:
   
-  # ii. for duplicated genes, add NA in df_geneModule[["module_merged"]] for the j copy
+  # ii. for duplicated genes, add NA in dt_geneMod[["module_merged"]] for the j copy
   
   mods_to_merge <- modules[idx_colBigIntersect[logical2_colBigIntersectCorr]]
-  mods_to_merge_into <- if (mergeOrPrune=="merge") modules[idx_rowBigIntersect[logical2_colBigIntersectCorr]] else NULL
+  mods_to_merge_into <- modules[idx_rowBigIntersect[logical2_colBigIntersectCorr]] 
 
+  # Check whether to swap the two vectors to keep modules from favoured celltypes
+  if (!is.null(cellClusters_keep)) {
+    mods_to_merge_cellClusters = sapply(mods_to_merge, function(eachMod) {
+      dt_geneMod[[colCellClust]][dt_geneMod[["module_merged"]]==eachMod][1]
+      })
+    
+    if (any(mods_to_merge_cellClusters %in% cellClusters_keep)) {
+      
+      mods_to_merge_into_cellClusters = sapply(mods_to_merge_into, function(eachMod) {
+        dt_geneMod[[colCellClust]][dt_geneMod[["module_merged"]]==eachMod][1]
+      })
+     
+      # swap, where appropriate
+      mods_to_merge <- ifelse(mods_to_merge_cellClusters %in% cellClusters_keep & 
+                              !mods_to_merge_into_cellClusters %in% cellClusters_keep, mods_to_merge_into, mods_to_merge)
+      mods_to_merge_into <- ifelse(mods_to_merge_cellClusters %in% cellClusters_keep & 
+                              !mods_to_merge_into_cellClusters %in% cellClusters_keep, mods_to_merge, mods_to_merge_into)
+      
+    }
+  }
+  
+  if (mergeOrPrune=="prune") mods_to_merge_into <- NULL 
+  
   ######################################################################
-  ###################### UPDATE DF_GENEMODULE ##########################
+  ###################### UPDATE dt_geneMod ##########################
   ######################################################################
   
   message("Updating module dataframe")
   
   for (i in 1:length(mods_to_merge)) {
-    cell_cluster_to_merge_into <- if (mergeOrPrune=="merge") df_geneModule[["cell_cluster"]][df_geneModule[["module"]]==mods_to_merge_into[i]][1] else NULL
+    cell_cluster_to_merge_into <- if (mergeOrPrune=="merge") dt_geneMod[[colCellClust]][dt_geneMod[[colModule]]==mods_to_merge_into[i]][1] else NULL
     # module_merged column
-    logical_to_merge <- df_geneModule[["module_merged"]] %in% mods_to_merge[i] 
-    logical_to_merge_into <- df_geneModule[["module_merged"]] %in% mods_to_merge_into[i]
+    logical_to_merge <- dt_geneMod[["module_merged"]] %in% mods_to_merge[i] 
+    logical_to_merge_into <- dt_geneMod[["module_merged"]] %in% mods_to_merge_into[i]
 
-    df_geneModule[["module_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") mods_to_merge_into[i] else NA
-    df_geneModule[["cell_cluster_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") cell_cluster_to_merge_into else NA
+    dt_geneMod[["module_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") mods_to_merge_into[i] else NA
+    dt_geneMod[["cell_cluster_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") cell_cluster_to_merge_into else NA
     
     if (mergeOrPrune=="merge") {
       # in module_merged column set duplicate genes in merged module to NA_character 
-      logical_dup <- duplicated(df_geneModule[["hgnc"]]) 
+      logical_dup <- duplicated(dt_geneMod[["hgnc"]]) 
       logical_dup_merged <- logical_dup & logical_to_merge
       
-      #logical2_isna <- is.na(df_geneModule[["module_merged"]][logical_to_merge | logical_to_merge_into][logical2_dup])
-      df_geneModule[["module_merged"]][logical_dup_merged] <- NA_character_
-      df_geneModule[["cell_cluster_merged"]][logical_dup_merged] <- NA_character_ 
+      #logical2_isna <- is.na(dt_geneMod[["module_merged"]][logical_to_merge | logical_to_merge_into][logical2_dup])
+      dt_geneMod[["module_merged"]][logical_dup_merged] <- NA_character_
+      dt_geneMod[["cell_cluster_merged"]][logical_dup_merged] <- NA_character_ 
     }
   }
   
@@ -435,7 +442,7 @@ while (T) {
 ############################ WRAP UP #################################
 ######################################################################
 
-saveMeta(savefnc=write.csv,x = df_geneModule, file= gzfile(paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv.gz")), quote = F, row.names=F)
+data.table::fwrite(x = dt_geneMod, file= gzfile(paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv.gz")), compress="gzip")
 
 ############################### FINISH ##################################
 
