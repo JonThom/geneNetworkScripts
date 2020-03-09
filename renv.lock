@@ -322,6 +322,12 @@
       "Source": "CRAN",
       "Hash": "70941d6476af18c149b5b6916f87a7c5"
     },
+    "corrplot": {
+      "Package": "corrplot",
+      "Version": "0.84",
+      "Source": "CRAN",
+      "Hash": "7fb87bf85c4cec1f581362c9dcfdfbf3"
+    },
     "cowplot": {
       "Package": "cowplot",
       "Version": "1.0.0",
@@ -555,6 +561,12 @@
       "Version": "3.8.1",
       "Source": "CRAN",
       "Hash": "a7fe2106d673bc8ebc7529e33d25c2ea"
+    },
+    "here": {
+      "Package": "here",
+      "Version": "0.1",
+      "Source": "CRAN",
+      "Hash": "07f70da7018237a1c3ba8f455bdec18d"
     },
     "hexbin": {
       "Package": "hexbin",
