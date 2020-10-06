@@ -76,7 +76,7 @@ if (F) {
     colModule = "module_filter",
     colCellClust = "cell_cluster_filter",
     colGeneWeights = "pkMs",
-    cellClusters_keep = 'c("T-cells-alpha-beta", "NK-like-cells", "Endothelial-cells", "T-cells-gamma-delta", "Macrophages", "Cholangiocytes", "Hepatocytes","Hepatic-stellate-cells", "Dendritic-cells", "Hepatic-stem-cells")',
+    cellClusters_keep = NULL,#'c("T-cells-alpha-beta", "NK-like-cells", "Endothelial-cells", "T-cells-gamma-delta", "Macrophages", "Cholangiocytes", "Hepatocytes","Hepatic-stellate-cells", "Dendritic-cells", "Hepatic-stem-cells")',
     minPropIntersect  = 0.65, 
     #minWeightedCor  = 0.5,
     minPropIntersect_iter_increase  = 1.01,
@@ -231,8 +231,8 @@ while (T) {
   message("Computing module-module gene intersect matrix")
   
   fun = function(geneWeights) {
-    sapply(list_geneWeights, function(geneWeightsOther) {
-      base::intersect(x=names(geneWeights), y=names(geneWeightsOther)) %>% length %>% '/'(length(geneWeights))
+    sapply(list_geneWeights, function(geneWeightsOther) { # column
+      base::intersect(x=names(geneWeights), y=names(geneWeightsOther)) %>% length %>% '/'(length(geneWeights)) # row
     }, simplify=T)
   }
   
@@ -252,6 +252,15 @@ while (T) {
   # exclude these from following iterations to save time
   #modules_to_exclude <- c(modules_to_exclude, modules[logical_noBigIntersect])
   
+  # traverse intersect matrix columns, get col idx where max intersect is large
+  idx_colBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, FUN=function(j) max(j) >= minPropIntersect)  %>% which
+  # traverse columns, find the row that the intersect is largest with
+  idx_rowBigColIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, which.max) %>% '['(idx_colBigIntersect)
+  names(idx_rowBigColIntersect) = NULL
+  if (length(idx_colBigIntersect)==0) {
+    message("no more modules to merge")
+    break
+  }
   ######################################################################
   ####################### Plot the overlap matrix ######################
   ######################################################################
@@ -280,20 +289,10 @@ while (T) {
   ########### Compute the overlap weighted correlation matrix ##########
   ######################################################################
   
-  message("Computing weighted intersect gene weight correlations for highly overlapping modules")
+  #message("Computing weighted intersect gene weight correlations for highly overlapping modules")
   
-  mat_modIntersectCorrWeighted <- matrix(data=0, nrow=nrow(mat_moduleGeneIntersect), ncol=ncol(mat_moduleGeneIntersect))
-  dimnames(mat_modIntersectCorrWeighted) <- dimnames(mat_moduleGeneIntersect)
-  
-  # traverse intersect matrix columns, get col idx where max intersect is large
-  idx_colBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, FUN=function(j) max(j) >= minPropIntersect)  %>% which
-  # traverse columns, find the row that the intersect is largest with
-  idx_rowBigColIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, which.max) %>% '['(idx_colBigIntersect)
-  names(idx_rowBigColIntersect) = NULL
-  if (length(idx_colBigIntersect)==0) {
-    message("no more modules to merge")
-    break
-  }
+  #mat_modIntersectCorrWeighted <- matrix(data=0, nrow=nrow(mat_moduleGeneIntersect), ncol=ncol(mat_moduleGeneIntersect))
+  #dimnames(mat_modIntersectCorrWeighted) <- dimnames(mat_moduleGeneIntersect)
   
   # For columns and rows with big intersect, calculate the correlations
   # for (k in 1:length(idx_colBigIntersect)) {
@@ -365,32 +364,34 @@ while (T) {
   # 
   # logical_colmerge[which(logical_colmerge)][!logical_highcorr]
   
-  logical2_colBigIntersectCorr <- sapply(1:length(idx_colBigIntersect), function(k){
-    j = idx_colBigIntersect[k]
-    i = idx_rowBigColIntersect[k]
+  # logical2_colBigIntersectCorr <- sapply(1:length(idx_colBigIntersect), function(k){
+  #   j = idx_colBigIntersect[k]
+  #   i = idx_rowBigColIntersect[k]
     # For each module pair j,i, before merging module j into i,
     # check if module i itself might be merged into a third module m, and 
     # the intersecting genes between i and m are more correlated, weighted
     # by the gene weights and the overall intersect size, than that of j and i
     
-    idx_matchedMax <- which.max(mat_modIntersectCorrWeighted[,i])
-    bool <- mat_modIntersectCorrWeighted[i,j]*mat_moduleGeneIntersect[i,j] >= max(mat_modIntersectCorrWeighted[idx_matchedMax,i])*mat_moduleGeneIntersect[idx_matchedMax,i]
+    # idx_matchedMax <- which.max(mat_modIntersectCorrWeighted[,i])
+    #bool <- mat_modIntersectCorrWeighted[i,j]*mat_moduleGeneIntersect[i,j] >= max(mat_modIntersectCorrWeighted[idx_matchedMax,i])*mat_moduleGeneIntersect[idx_matchedMax,i]
     # is the intersect correlation sufficient?
-    bool2 <- bool & mat_modIntersectCorrWeighted[i,j] >= minWeightedCor
-  })
-
-  if (!any(logical2_colBigIntersectCorr)) {
-    message("no more modules to merge")
-    break
-  }
+    #bool2 <- bool & mat_modIntersectCorrWeighted[i,j] >= minWeightedCor
+  # })
+  # 
+  # if (!any(logical2_colBigIntersectCorr)) {
+  #   message("no more modules to merge")
+  #   break
+  # }
   
   ### Merge module j into i in dt_geneMod dataframe:
   
   # ii. for duplicated genes, add NA in dt_geneMod[["module_merged"]] for the j copy
   
-  mods_to_merge <- modules[idx_colBigIntersect[logical2_colBigIntersectCorr]]
-  mods_to_merge_into <- modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]] 
-
+  #mods_to_merge <- modules[idx_colBigIntersect[logical2_colBigIntersectCorr]]
+  mods_to_merge <- modules[idx_colBigIntersect]
+  #mods_to_merge_into <- modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]] 
+  mods_to_merge_into <- modules[idx_rowBigColIntersect] 
+  
   # Check whether to swap the two vectors to keep modules from favoured celltypes
   if (!is.null(cellClusters_keep)) {
     mods_to_merge_cellClusters = sapply(mods_to_merge, function(eachMod) {
@@ -421,17 +422,17 @@ while (T) {
   message("Updating module dataframe")
   
   for (i in 1:length(mods_to_merge)) {
-    cell_cluster_to_merge_into <- if (mergeOrPrune=="merge") dt_geneMod[[colCellClust]][dt_geneMod[[colModule]]==mods_to_merge_into[i]][1] else NULL
+    cell_cluster_to_merge_into <- if (mergeOrPrune=="merge") dt_geneMod[[colCellClust]][dt_geneMod[[colModule]] == mods_to_merge_into[i]][1] else NULL
     # module_merged column
     logical_to_merge <- dt_geneMod[["module_merged"]] %in% mods_to_merge[i] 
-    logical_to_merge_into <- dt_geneMod[["module_merged"]] %in% mods_to_merge_into[i]
+    logical_to_merge_into <- if (mergeOrPrune=="merge") dt_geneMod[["module_merged"]] == mods_to_merge_into[i] else NULL
 
-    dt_geneMod[["module_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") mods_to_merge_into[i] else NA
-    dt_geneMod[["cell_cluster_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") cell_cluster_to_merge_into else NA
+    dt_geneMod[["module_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") mods_to_merge_into[i] else NA_character_
+    dt_geneMod[["cell_cluster_merged"]][logical_to_merge] <- if (mergeOrPrune=="merge") cell_cluster_to_merge_into else NA_character_
     
     if (mergeOrPrune=="merge") {
       # in module_merged column set duplicate genes in merged module to NA_character 
-      logical_dup <- duplicated(dt_geneMod[["hgnc"]]) 
+      logical_dup <- duplicated(dt_geneMod[["genes"]]) 
       logical_dup_merged <- logical_dup & logical_to_merge
       
       #logical2_isna <- is.na(dt_geneMod[["module_merged"]][logical_to_merge | logical_to_merge_into][logical2_dup])
@@ -441,12 +442,13 @@ while (T) {
   }
   
   # write out log 
-  log_entry <- paste0("merge iteration ", iteration, " with minPropIntersect = ", round(minPropIntersect,3), " and minWeightedCor = ", minWeightedCor)
+  log_entry <- paste0("merge iteration ", iteration, " with minPropIntersect = ", round(minPropIntersect,3))#, " and minWeightedCor = ", minWeightedCor)
   message(log_entry)
   #cat(log_entry, file = pathLog, append=T, sep = "\n")
 
   log_entry <- if (mergeOrPrune=="merge") { paste0("    merging ", mods_to_merge, " into ", mods_to_merge_into, collapse="\n") } else {
-    paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]], collapse="\n") 
+    #paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]], collapse="\n")
+    paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigColIntersect], collapse="\n") 
   }
   
   message(log_entry)
