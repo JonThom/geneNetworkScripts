@@ -38,7 +38,7 @@ option_list <- list(
               help = "nwa_df column with gene weights, , [default %default]"),  
   make_option("--colGeneNames", type="character", default="genes",
               help ="string or regex for grepping nwa_df e.g. 'hgnc|symbol|gene_name' or 'ensembl', [default %default]"),
-    make_option("--minPropIntersect", type="numeric", default = 0.7,
+    make_option("--minPropIntersect", type="numeric", default = 0.65,
               help = "minimum proportion of module j intersecting with module i to discard j or merge j into i, [default %default]"),
   make_option("--minPropIntersect_iter_increase", type="numeric", default = 1.02,
               help = "At the end of each iteration, multiply the minPropIntersect threshold by some numeric constant >= 1 to help ensure convergence given that merging modules increases the probability that others will have a large overlap with them, [default %default]"),
@@ -188,7 +188,7 @@ dt_geneMod[["module_merged"]] <- dt_geneMod[[colModule]]
 dt_geneMod[["cell_cluster_merged"]] <- dt_geneMod[[colCellClust]]
 
 #dt_geneMod[[paste0(colGeneWeights, "_merged")]] <- dt_geneMod[[colGeneWeights]] 
-#pathLog <- paste0(dirLog, prefixOut, "_mod_merge_log.txt")
+pathLog <- paste0(dirLog, prefixOut, "_", flagDate, "_mod_merge_log.txt")
 iteration=1
 #modules_to_exclude <- c()
 
@@ -444,7 +444,7 @@ while (T) {
   # write out log 
   log_entry <- paste0("merge iteration ", iteration, " with minPropIntersect = ", round(minPropIntersect,3))#, " and minWeightedCor = ", minWeightedCor)
   message(log_entry)
-  #cat(log_entry, file = pathLog, append=T, sep = "\n")
+  cat(log_entry, file = pathLog, append=T, sep = "\n")
 
   log_entry <- if (mergeOrPrune=="merge") { paste0("    merging ", mods_to_merge, " into ", mods_to_merge_into, collapse="\n") } else {
     #paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]], collapse="\n")
@@ -452,12 +452,14 @@ while (T) {
   }
   
   message(log_entry)
-  #cat(log_entry, file = pathLog, append=T, sep = "\n")
+  cat(log_entry, file = pathLog, append=T, sep = "\n")
   
   iteration = iteration+1
  
   if (iteration>maxIter) {
     message(paste0(maxIter, " iterations reached, stopping"))
+  } elif (mergeOrPrune=="prune") {
+    break
   }
   
   #increment the minPropIntersect
