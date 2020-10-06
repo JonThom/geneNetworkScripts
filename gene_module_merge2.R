@@ -1,10 +1,10 @@
-## script to merge gene modules from different WGCNA runs based on the overlap in genes
+## script to prune or merge gene modules from different WGCNA runs based on the overlap in genes
 
 # Usage e.g.
 # time Rscript /nfsdata/projects/jonatan/tools/wgcna-src/geneNetworkScripts/gene_module_merge2.R  --path_df_NWA /projects/jonatan/pub-perslab/18-liver-wgcna/tables/liver_perslab_int_wgcna1_cell_cluster_module_genes.csv.gz --colGeneWeights pkMs  --colGeneNames genes --minPropIntersect  0.75 --minWeightedCor  0.75 --minPropIntersect_iter_increase  1.01 --maxIter 25 --corMethod  pearson --dirOut /projects/jonatan/pub-perslab/18-liver-wgcna/ --prefixOut merge1 --RAMGbMax 250
 
 # Algorithm:
-# Do until k == maxIter or until there are no modules to merge:
+# Do until k == maxIter or until there are no modules to prune / merge:
 # 1. for each module j, find the module i with which it has the highest gene overlap as 
 #     a proportion of the total genes in j (number in [0:1])
 # 2. if minPropIntersect and minWeightedCor conditions are met, 
@@ -22,7 +22,6 @@
 ######################################################################
 
 library("optparse")
-
 
 ######################################################################
 ########################### OPTPARSE #################################
@@ -43,12 +42,12 @@ option_list <- list(
               help = "minimum proportion of module j intersecting with module i to discard j or merge j into i, [default %default]"),
   make_option("--minPropIntersect_iter_increase", type="numeric", default = 1.02,
               help = "At the end of each iteration, multiply the minPropIntersect threshold by some numeric constant >= 1 to help ensure convergence given that merging modules increases the probability that others will have a large overlap with them, [default %default]"),
-  make_option("--minWeightedCor", type="numeric", default = 0.7,
-              help = "if module j has at least minPropIntersect genes also in module i, set minimum correlation weighted by gene weight, to discard j or merge j into i, [default %default]"),
+  # make_option("--minWeightedCor", type="numeric", default = 0.7,
+  #             help = "if module j has at least minPropIntersect genes also in module i, set minimum correlation weighted by gene weight, to discard j or merge j into i, [default %default]"),
   make_option("--cellClusters_keep", type="character", default = NULL,
               help = "quoted vector of character, e.g. ''c('hepatocytes', 'stellate_cells')''. If provided, when comparing a module of this celltype with a module of another celltype, the script will always keep the former, overriding usual behaviour [default %default]"),
-  make_option("--corMethod", type="character", default = "pearson",
-              help = "pearson, spearman or kendall, [default %default]"),
+  # make_option("--corMethod", type="character", default = "pearson",
+  #             help = "pearson, spearman or kendall, [default %default]"),
   make_option("--mergeOrPrune", type="character", default = "prune",
               help = "'merge' to merge close modules or 'prune' to discard modules largely contained in others, [default %default]"),
   make_option("--maxIter", type="integer", default = 20,
@@ -65,6 +64,32 @@ option_list <- list(
 
 
 library("here")
+
+######################################################################
+######################### TESTING ################################
+######################################################################
+
+if (F) {
+  opt = list(
+    path_df_NWA ="/projects/jonatan/pub-perslab/18-liver-wgcna/tables/liver_perslab_int_wgcna3_geneMod.csv.gz",
+    colGeneNames = "genes",
+    colModule = "module_filter",
+    colCellClust = "cell_cluster_filter",
+    colGeneWeights = "pkMs",
+    cellClusters_keep = 'c("T-cells-alpha-beta", "NK-like-cells", "Endothelial-cells", "T-cells-gamma-delta", "Macrophages", "Cholangiocytes", "Hepatocytes","Hepatic-stellate-cells", "Dendritic-cells", "Hepatic-stem-cells")',
+    minPropIntersect  = 0.65, 
+    #minWeightedCor  = 0.5,
+    minPropIntersect_iter_increase  = 1.01,
+    maxIter = 25,
+    #corMethod = "pearson", 
+    mergeOrPrune = "prune",
+    dirOut = "/projects/jonatan/pub-perslab/18-liver-wgcna/",
+    prefixOut ="merge2",
+    doPlot = T,
+    RAMGbMax = 250 
+  ) 
+}
+
 
 ######################################################################
 ######################### SOURCE FUNCTIONS ################################
@@ -86,11 +111,11 @@ colGeneNames <- opt$colGeneNames
 maxIter <- opt$maxIter
 dirOut <- opt$dirOut
 prefixOut <- opt$prefixOut
-corMethod <- opt$corMethod
+#corMethod <- opt$corMethod
 mergeOrPrune = opt$mergeOrPrune
 minPropIntersect <- opt$minPropIntersect
 minPropIntersect_iter_increase <- opt$minPropIntersect_iter_increase
-minWeightedCor <- opt$minWeightedCor
+#minWeightedCor <- opt$minWeightedCor
 cellClusters_keep <- opt$cellClusters_keep
 if (!is.null(cellClusters_keep)) cellClusters_keep <- eval(parse(text=cellClusters_keep))
 doPlot <- opt$doPlot
@@ -104,7 +129,7 @@ library("data.table")
 library("magrittr")
 library("Matrix")
 library("parallel")
-library("WGCNA")
+#library("WGCNA")
 library("readr")
 if (doPlot) {
   library("corrplot")
@@ -165,18 +190,18 @@ dt_geneMod[["cell_cluster_merged"]] <- dt_geneMod[[colCellClust]]
 #dt_geneMod[[paste0(colGeneWeights, "_merged")]] <- dt_geneMod[[colGeneWeights]] 
 #pathLog <- paste0(dirLog, prefixOut, "_mod_merge_log.txt")
 iteration=1
-modules_to_exclude <- c()
+#modules_to_exclude <- c()
 
 while (T) {
   
-  message(paste0(prefixOut, " merge iteration ", iteration))  
+  message(paste0("merge iteration ", iteration))  
   ######################################################################
   ########################### GET MODULES ##############################
   ######################################################################
   
   unique(dt_geneMod[["module_merged"]]) %>% sort %>% na.omit %>% as.character -> modules  
   
-  modules <- modules[!modules %in% modules_to_exclude]
+  #modules <- modules[!modules %in% modules_to_exclude]
   
   modules <- modules[nchar(modules)>0]
   ######################################################################
@@ -219,13 +244,13 @@ while (T) {
   
   ### Compute modules to exclude in the coming iterations ###
   # They have no big intersections with other modules as a prop of their genes
-  logical_colNoBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, FUN=function(j) max(j) < 0.75*minPropIntersect)  
+  #logical_colNoBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, FUN=function(eachcol) max(eachcol) < 0.75*minPropIntersect)  
   # No other modules have a big intersection with them
-  logical_rowNoBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=1, FUN=function(j) max(j) < 0.75*minPropIntersect)  
-  logical_noBigIntersect <- logical_colNoBigIntersect | logical_rowNoBigIntersect 
+  #logical_rowNoBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=1, FUN=function(eachrow) max(eachrow) < 0.75*minPropIntersect)  
+  #logical_noBigIntersect <- logical_colNoBigIntersect & logical_rowNoBigIntersect 
   
   # exclude these from following iterations to save time
-  modules_to_exclude <- c(modules_to_exclude, modules[!logical_noBigIntersect])
+  #modules_to_exclude <- c(modules_to_exclude, modules[logical_noBigIntersect])
   
   ######################################################################
   ####################### Plot the overlap matrix ######################
@@ -241,7 +266,7 @@ while (T) {
              col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdYlBu")), bias = 1)(200),
              diag = F,
              is.corr=F,
-             title=paste0(prefixOut, ": prop. of mod j intersecting mod i, iteration ", iteration),
+             title=paste0("prop. of mod j intersecting mod i, iteration ", iteration),
              order = "original",#hclust",
              hclust.method = "average",
              addCoef.col = "black",
@@ -260,59 +285,59 @@ while (T) {
   mat_modIntersectCorrWeighted <- matrix(data=0, nrow=nrow(mat_moduleGeneIntersect), ncol=ncol(mat_moduleGeneIntersect))
   dimnames(mat_modIntersectCorrWeighted) <- dimnames(mat_moduleGeneIntersect)
   
-  # traverse intersect matrix columns, find any where the max intersect is large
+  # traverse intersect matrix columns, get col idx where max intersect is large
   idx_colBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, FUN=function(j) max(j) >= minPropIntersect)  %>% which
-  # traverse columns, find the row that the intersect is large with
-  idx_rowBigIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, which.max) %>% '['(idx_colBigIntersect)
-   
+  # traverse columns, find the row that the intersect is largest with
+  idx_rowBigColIntersect <- apply(mat_moduleGeneIntersect, MARGIN=2, which.max) %>% '['(idx_colBigIntersect)
+  names(idx_rowBigColIntersect) = NULL
   if (length(idx_colBigIntersect)==0) {
     message("no more modules to merge")
     break
   }
   
   # For columns and rows with big intersect, calculate the correlations
-  for (k in 1:length(idx_colBigIntersect)) {
-    j=idx_colBigIntersect[k]
-    i=idx_rowBigIntersect[k]
-    genesIntersect <- base::intersect(names(list_geneWeights[[j]]), names(list_geneWeights[[i]]))
-    mat_modIntersectCorrWeighted[i,j] <- WGCNA::cor(x = list_geneWeights[[j]][match(genesIntersect, names(list_geneWeights[[j]]))], 
-                                                     weights.x = list_geneWeights[[j]][match(genesIntersect, names(list_geneWeights[[j]]))],
-                                                    # correlate the jth column
-                                                     y= list_geneWeights[[i]][match(genesIntersect, names(list_geneWeights[[i]]))],
-                                                     weights.y = list_geneWeights[[i]][match(genesIntersect, names(list_geneWeights[[i]]))],
-                                                    # with the ith row
-                                                     method = corMethod, 
-                                                     quick=0.25, 
-                                                     verbose=F, 
-                                                     nThreads=30)
-      
-    
-  }
+  # for (k in 1:length(idx_colBigIntersect)) {
+  #   j=idx_colBigIntersect[k]
+  #   i=idx_rowBigColIntersect[k]
+  #   genesIntersect <- base::intersect(names(list_geneWeights[[j]]), names(list_geneWeights[[i]]))
+  #   mat_modIntersectCorrWeighted[i,j] <- WGCNA::cor(x = list_geneWeights[[j]][match(genesIntersect, names(list_geneWeights[[j]]))], 
+  #                                                    weights.x = list_geneWeights[[j]][match(genesIntersect, names(list_geneWeights[[j]]))],
+  #                                                   # correlate the jth column
+  #                                                    y= list_geneWeights[[i]][match(genesIntersect, names(list_geneWeights[[i]]))],
+  #                                                    weights.y = list_geneWeights[[i]][match(genesIntersect, names(list_geneWeights[[i]]))],
+  #                                                   # with the ith row
+  #                                                    method = corMethod, 
+  #                                                    quick=0.25, 
+  #                                                    verbose=F, 
+  #                                                    nThreads=30)
+  #     
+  #   
+  # }
   
   ######################################################################
   ############### Plot the overlap weighted correlation matrix #########
   ######################################################################
-  if(doPlot) {
-    message("Plotting gene intersect weighted correlation matrix")
-
-    pdf(sprintf("%s%s_iter%s_mat_modIntersectCorrWeighted.pdf", dirPlots, prefixOut, iteration),
-        width=max(20,ncol(mat_modIntersectCorrWeighted) %/% 3),
-        height=max(20,ncol(mat_modIntersectCorrWeighted) %/% 3))
-    corrplot(corr = mat_modIntersectCorrWeighted,
-             method = "color",
-             col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdYlBu")), bias = 1)(200),
-             diag = F,
-             is.corr=F,
-             title=paste0(prefixOut, ": weighted correlation of mod j's intersection with mod i, iteration ", iteration),
-             order = "original",#"hclust",
-             #hclust.method = "average",
-             addCoef.col = "black",
-             tl.srt = 45,
-             number.digits = 2L,
-             number.cex = 0.5)
-
-    invisible(dev.off())
-  }
+  # if(doPlot) {
+  #   message("Plotting gene intersect weighted correlation matrix")
+  # 
+  #   pdf(sprintf("%s%s_iter%s_mat_modIntersectCorrWeighted.pdf", dirPlots, prefixOut, iteration),
+  #       width=max(20,ncol(mat_modIntersectCorrWeighted) %/% 3),
+  #       height=max(20,ncol(mat_modIntersectCorrWeighted) %/% 3))
+  #   corrplot(corr = mat_modIntersectCorrWeighted,
+  #            method = "color",
+  #            col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdYlBu")), bias = 1)(200),
+  #            diag = F,
+  #            is.corr=F,
+  #            title=paste0("weighted correlation of mod j's intersection with mod i, iteration ", iteration),
+  #            order = "original",#"hclust",
+  #            #hclust.method = "average",
+  #            addCoef.col = "black",
+  #            tl.srt = 45,
+  #            number.digits = 2L,
+  #            number.cex = 0.5)
+  # 
+  #   invisible(dev.off())
+  # }
   ######################################################################
   ################### IDENTIFY MODULES TO MERGE ########################
   ######################################################################
@@ -342,7 +367,7 @@ while (T) {
   
   logical2_colBigIntersectCorr <- sapply(1:length(idx_colBigIntersect), function(k){
     j = idx_colBigIntersect[k]
-    i = idx_rowBigIntersect[k]
+    i = idx_rowBigColIntersect[k]
     # For each module pair j,i, before merging module j into i,
     # check if module i itself might be merged into a third module m, and 
     # the intersecting genes between i and m are more correlated, weighted
@@ -364,7 +389,7 @@ while (T) {
   # ii. for duplicated genes, add NA in dt_geneMod[["module_merged"]] for the j copy
   
   mods_to_merge <- modules[idx_colBigIntersect[logical2_colBigIntersectCorr]]
-  mods_to_merge_into <- modules[idx_rowBigIntersect[logical2_colBigIntersectCorr]] 
+  mods_to_merge_into <- modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]] 
 
   # Check whether to swap the two vectors to keep modules from favoured celltypes
   if (!is.null(cellClusters_keep)) {
@@ -416,12 +441,12 @@ while (T) {
   }
   
   # write out log 
-  log_entry <- paste0(prefixOut, " merge iteration ", iteration, " with minPropIntersect = ", round(minPropIntersect,3), " and minWeightedCor = ", minWeightedCor)
+  log_entry <- paste0("merge iteration ", iteration, " with minPropIntersect = ", round(minPropIntersect,3), " and minWeightedCor = ", minWeightedCor)
   message(log_entry)
   #cat(log_entry, file = pathLog, append=T, sep = "\n")
 
   log_entry <- if (mergeOrPrune=="merge") { paste0("    merging ", mods_to_merge, " into ", mods_to_merge_into, collapse="\n") } else {
-    paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigIntersect[logical2_colBigIntersectCorr]], collapse="\n") 
+    paste0("    pruning ", mods_to_merge, " due to overlap with ", modules[idx_rowBigColIntersect[logical2_colBigIntersectCorr]], collapse="\n") 
   }
   
   message(log_entry)
@@ -442,7 +467,7 @@ while (T) {
 ############################ WRAP UP #################################
 ######################################################################
 
-data.table::fwrite(x = dt_geneMod, file= paste0(gsub("\\.csv.gz", "", path_df_NWA), "_merged", ".csv.gz"), compress="gzip")
+data.table::fwrite(x = dt_geneMod, file= path_df_NWA, compress="gzip")
 
 ############################### FINISH ##################################
 
